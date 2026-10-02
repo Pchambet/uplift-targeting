@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 from uplift_targeting import config
-from uplift_targeting.experiment import Z95, difference_in_means
+from uplift_targeting.experiment import Z95, decile_rates
 from uplift_targeting.metrics import bootstrap_areas, uplift_curve
 from uplift_targeting.modeling import BASES
 from uplift_targeting.policy import (
@@ -65,15 +65,16 @@ def learners_in(scores: pd.DataFrame) -> list[str]:
 
 def qini_tables(
     scores: pd.DataFrame, n_boot: int = config.N_BOOTSTRAP
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Qini and AUUC over random, with bootstrap CIs, for every model x outcome x e-mail.
 
     The response model of the same e-mail and outcome is scored alongside the
     uplift learners, so the table shows directly whether predicting *who buys*
     is a good proxy for predicting *who is moved*. Also returns the uplift
-    curves of the LightGBM models for plotting.
+    curves of the LightGBM models for plotting, and a paired bootstrap
+    comparison of the DR-learner with the response model.
     """
-    rows, curves = [], []
+    rows, curves, paired = [], [], []
     for outcome in config.OUTCOMES:
         for arm in (1, 2):
             pair = scores[scores["arm"].isin([0, arm])]
@@ -87,7 +88,22 @@ def qini_tables(
             rankings[(RESPONSE, "lgbm")] = pair[response_column(outcome, arm)].to_numpy()
             named = {f"{n}|{b}": s for (n, b), s in rankings.items()}
             seed = config.SEED + 10 * arm + config.OUTCOMES.index(outcome)
-            qini, _ = bootstrap_areas(named, y, t, n_boot, seed=seed, kind="qini")
+            qini, reps = bootstrap_areas(named, y, t, n_boot, seed=seed, kind="qini")
+            # Paired comparison on the same bootstrap draws: DR-learner minus response model.
+            names = list(named)
+            diff = (
+                reps[:, names.index("DR-learner|lgbm")] - reps[:, names.index(f"{RESPONSE}|lgbm")]
+            )
+            paired.append(
+                {
+                    "outcome": outcome,
+                    "arm": config.ARM_LABELS[arm],
+                    "dr_minus_response": qini["DR-learner|lgbm"].estimate
+                    - qini[f"{RESPONSE}|lgbm"].estimate,
+                    "low": float(np.quantile(diff, 0.025)),
+                    "high": float(np.quantile(diff, 0.975)),
+                }
+            )
             auuc, _ = bootstrap_areas(named, y, t, n_boot, seed=seed, kind="uplift")
             for (name, base), score in rankings.items():
                 q, u = qini[f"{name}|{base}"], auuc[f"{name}|{base}"]
@@ -119,7 +135,7 @@ def qini_tables(
                     }
                     for f, g in zip(CURVE_GRID, gain, strict=True)
                 ]
-    return pd.DataFrame(rows), pd.DataFrame(curves)
+    return pd.DataFrame(rows), pd.DataFrame(curves), pd.DataFrame(paired)
 
 
 def decile_table(scores: pd.DataFrame) -> pd.DataFrame:
@@ -142,25 +158,9 @@ def decile_table(scores: pd.DataFrame) -> pd.DataFrame:
                 RESPONSE: pair[response_column(outcome, arm)].to_numpy(),
             }
             for name, score in rankings.items():
-                rank = pd.Series(score).rank(method="first").to_numpy()
-                decile = 10 - np.ceil(10 * rank / len(score)).astype(int)  # 0 = top decile
-                for d in range(10):
-                    m = decile == d
-                    eff = difference_in_means(y[m], t[m])
-                    rows.append(
-                        {
-                            "arm": config.ARM_LABELS[arm],
-                            "outcome": outcome,
-                            "ranking": name,
-                            "decile": d + 1,
-                            "n": int(m.sum()),
-                            "control_rate": float(y[m][t[m] == 0].mean()),
-                            "treated_rate": float(y[m][t[m] == 1].mean()),
-                            "uplift": eff.estimate,
-                            "uplift_low": eff.low,
-                            "uplift_high": eff.high,
-                        }
-                    )
+                table = decile_rates(score, y, t, seed=config.SEED)
+                key = {"arm": config.ARM_LABELS[arm], "outcome": outcome, "ranking": name}
+                rows += [key | row for row in table.to_dict("records")]
     return pd.DataFrame(rows)
 
 
@@ -342,40 +342,60 @@ def policy_curves(
     return pd.DataFrame(rows)
 
 
-def cross_selected_budget(
-    data: PolicyData, half: np.ndarray, rankings: dict[int, Ranking], ratio: float
-) -> np.ndarray:
-    """Choose how many to e-mail on one half, apply that choice to the other.
+@dataclass(frozen=True)
+class BudgetChoice:
+    """Cross-selected budget: the share to e-mail is chosen on one half, applied to the other.
 
-    Options are every share of the grid for the half's ranking plus the
+    The options are every share of the grid for the half's ranking plus the
     blanket Mens campaign, so the procedure is free to conclude "do not
-    target". ``ratio`` is cost / margin: maximising ``spend - ratio * share``
-    is the same as maximising profit.
+    target". Curves on the selection halves are computed once; choosing for a
+    given cost / margin ratio is then just an argmax.
     """
-    action = np.zeros(len(half), dtype=np.int64)
-    for h in (0, 1):
-        select, apply = half == 1 - h, half == h
-        ranking = rankings[h]
-        options = {
-            float(s): v - ratio * s
-            for s, v in zip(SHARES, value_curve(data, ranking, select), strict=True)
-        }
-        blanket = np.ones(int(select.sum()), dtype=np.int64)
-        options[-1.0] = data.subset(select).incremental(blanket).estimate - ratio
-        best = max(options, key=options.get)
-        action[apply] = 1 if best == -1.0 else ranking.policy(best, apply)[apply]
-    return action
+
+    half: np.ndarray
+    rankings: dict[int, Ranking]  # ranking applied to half h
+    curves: dict[int, np.ndarray]  # incremental value per share, measured on half 1 - h
+    blanket: dict[int, float]  # blanket Mens value, measured on half 1 - h
+
+    @classmethod
+    def build(cls, data: PolicyData, half: np.ndarray, rankings: dict[int, Ranking]):
+        curves, blanket = {}, {}
+        for h in (0, 1):
+            select = half == 1 - h
+            curves[h] = value_curve(data, rankings[h], select)
+            everyone = np.ones(int(select.sum()), dtype=np.int64)
+            blanket[h] = data.subset(select).incremental(everyone).estimate
+        return cls(half, rankings, curves, blanket)
+
+    def action(self, ratio: float) -> np.ndarray:
+        """Policy for cost / margin = ``ratio``: maximise ``value - ratio * share``."""
+        action = np.zeros(len(self.half), dtype=np.int64)
+        for h in (0, 1):
+            apply = self.half == h
+            profit = self.curves[h] - ratio * SHARES
+            if self.blanket[h] - ratio > profit.max():
+                action[apply] = 1
+            else:
+                share = float(SHARES[int(np.argmax(profit))])
+                action[apply] = self.rankings[h].policy(share, apply)[apply]
+        return action
 
 
-def deployable(
-    scores: pd.DataFrame, data: PolicyData, cs: CrossSelection, ratio: float
-) -> dict[str, np.ndarray]:
-    """Actions of the three procedures a team could ship, at a given cost / margin."""
+def budget_choices(
+    scores: pd.DataFrame, data: PolicyData, cs: CrossSelection
+) -> dict[str, BudgetChoice]:
     response = response_ranking(scores, "spend")
     return {
-        UPLIFT: cross_selected_budget(data, cs.half, {h: cs.ranking(h) for h in (0, 1)}, ratio),
-        RESPONSE: cross_selected_budget(data, cs.half, {0: response, 1: response}, ratio),
-        BLANKET: np.ones(len(scores), dtype=np.int64),
+        UPLIFT: BudgetChoice.build(data, cs.half, {h: cs.ranking(h) for h in (0, 1)}),
+        RESPONSE: BudgetChoice.build(data, cs.half, {0: response, 1: response}),
+    }
+
+
+def deployable(choices: dict[str, BudgetChoice], ratio: float) -> dict[str, np.ndarray]:
+    """Actions of the three procedures a team could ship, at a given cost / margin."""
+    n = len(next(iter(choices.values())).half)
+    return {name: c.action(ratio) for name, c in choices.items()} | {
+        BLANKET: np.ones(n, dtype=np.int64)
     }
 
 
@@ -394,15 +414,15 @@ def compare(
     return priced(diff, float(np.mean(a > 0) - np.mean(b > 0)), margin, cost)
 
 
-def economics_grid(scores: pd.DataFrame, data: PolicyData, cs: CrossSelection) -> pd.DataFrame:
+def economics_grid(data: PolicyData, choices: dict[str, BudgetChoice]) -> pd.DataFrame:
     """The deployable procedures re-run over a grid of cost / margin ratios.
 
     Their choices depend on the ratio only, so the report page can re-price
     any (margin, cost) pair from the nearest row.
     """
     rows = []
-    for ratio in np.round(np.arange(0.0, 2.0001, 0.05), 2):
-        for name, action in deployable(scores, data, cs, ratio).items():
+    for ratio in np.round(np.arange(0.0, 2.0001, 0.025), 3):  # holds 0.15 / 0.40 exactly
+        for name, action in deployable(choices, ratio).items():
             v = data.incremental(action)
             rows.append(
                 {
@@ -481,8 +501,9 @@ def run(scores: pd.DataFrame, n_boot: int = config.N_BOOTSTRAP) -> dict:
     out = config.RESULTS
     out.mkdir(parents=True, exist_ok=True)
 
-    qini, curves = qini_tables(scores, n_boot)
+    qini, curves, paired = qini_tables(scores, n_boot)
     qini.to_csv(out / "qini.csv", index=False)
+    paired.to_csv(out / "qini_dr_vs_response.csv", index=False)
     curves.to_csv(out / "uplift_curves.csv", index=False)
     decile_table(scores).to_csv(out / "deciles.csv", index=False)
 
@@ -505,8 +526,9 @@ def run(scores: pd.DataFrame, n_boot: int = config.N_BOOTSTRAP) -> dict:
         }
         if target != "spend":
             continue
-        economics_grid(scores, data, cs).to_csv(out / "policy_by_cost.csv", index=False)
-        acts = deployable(scores, data, cs, cost / margin)
+        choices = budget_choices(scores, data, cs)
+        economics_grid(data, choices).to_csv(out / "policy_by_cost.csv", index=False)
+        acts = deployable(choices, cost / margin)
         summary[target]["deployable"] = {
             name: {"share_emailed": float(np.mean(a > 0))}
             | priced(data.incremental(a), float(np.mean(a > 0)), margin, cost)

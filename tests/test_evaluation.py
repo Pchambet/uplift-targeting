@@ -6,9 +6,9 @@ import pytest
 
 from uplift_targeting import config
 from uplift_targeting.evaluation import (
+    BudgetChoice,
     PolicyData,
     cross_select,
-    cross_selected_budget,
     split_halves,
 )
 
@@ -68,10 +68,8 @@ def test_budget_choice_responds_to_cost():
     scores = synthetic_scores(seed=3)
     data = PolicyData.from_scores(scores, "spend")
     cs = cross_select(scores, data)
-    rankings = {h: cs.ranking(h) for h in (0, 1)}
-    cheap = cross_selected_budget(data, cs.half, rankings, ratio=0.1)
-    pricey = cross_selected_budget(data, cs.half, rankings, ratio=1.5)
-    never = cross_selected_budget(data, cs.half, rankings, ratio=5.0)
+    choice = BudgetChoice.build(data, cs.half, {h: cs.ranking(h) for h in (0, 1)})
+    cheap, pricey, never = (choice.action(r) for r in (0.1, 1.5, 5.0))
     # Effect is 2 for half the base: worth e-mailing them when cost/margin < 2, nobody above.
     assert np.mean(cheap > 0) >= 0.5
     assert np.mean(pricey > 0) == pytest.approx(0.5, abs=0.06)
