@@ -56,7 +56,7 @@ flowchart LR
 |---|---|---|---|
 | E-mail everyone (Mens) | 100% | $155 | [$41, $269] |
 | Uplift model, cross-selected model and budget | 85% | $114 | [$9, $219] |
-| Response model, cross-selected budget | 92% | $142 | [$31, $254] |
+| Response model, cross-selected budget | 93% | $142 | [$31, $254] |
 | Best of 30 models and budgets chosen in-sample (optimistic) | 100% | $182 | not valid |
 
 **When targeting pays.** Once an e-mail costs about as much as it returns, blanket sending loses money and both targeted procedures cut the list instead.

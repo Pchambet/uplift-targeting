@@ -8,6 +8,7 @@ appears verbatim in the README, so the README cannot drift from the outputs.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 
 import pandas as pd
@@ -65,6 +66,11 @@ def read_table(name: str) -> pd.DataFrame:
 
 def read_json(name: str) -> dict:
     return json.loads((config.RESULTS / name).read_text())
+
+
+def share(x: float) -> str:
+    """Whole percent, rounding halves up like the report page's JavaScript."""
+    return f"{math.floor(100 * x + 0.5)}%"
 
 
 def money(x: float) -> str:
@@ -174,16 +180,16 @@ def policy_numbers() -> dict[str, str]:
         "BLANKET_CI": f"[{money(blanket['low'])}, {money(blanket['high'])}]",
         "UPLIFT_VALUE": money(dep[UPLIFT]["value_per_1000"]),
         "UPLIFT_CI": f"[{money(dep[UPLIFT]['low'])}, {money(dep[UPLIFT]['high'])}]",
-        "UPLIFT_SHARE": f"{dep[UPLIFT]['share_emailed']:.0%}",
+        "UPLIFT_SHARE": share(dep[UPLIFT]["share_emailed"]),
         "RESPONSE_VALUE": money(dep[RESPONSE]["value_per_1000"]),
-        "RESPONSE_SHARE": f"{dep[RESPONSE]['share_emailed']:.0%}",
+        "RESPONSE_SHARE": share(dep[RESPONSE]["share_emailed"]),
         "RESPONSE_CI": f"[{money(dep[RESPONSE]['low'])}, {money(dep[RESPONSE]['high'])}]",
         "UPLIFT_MINUS_BLANKET": signed_money(diff["value_per_1000"]),
         "UPLIFT_MINUS_BLANKET_CI": f"[{signed_money(diff['low'])}, {signed_money(diff['high'])}]",
         "NAIVE_VALUE": money(naive["value_per_1000"]),
         "NAIVE_GAIN": signed_money(naive["value_per_1000"] - blanket["value_per_1000"]),
         "NAIVE_CHOICE": naive["choice"],
-        "NAIVE_SHARE": f"{naive['share']:.0%}",
+        "NAIVE_SHARE": share(naive["share"]),
         "RHO_SPEND": f"{rho['spend']:.2f}",
         "RHO_VISIT": f"{rho['visit']:.2f}",
         "BREAK_EVEN_COST": f"{break_even:.0f} cents",

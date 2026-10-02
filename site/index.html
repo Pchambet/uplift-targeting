@@ -267,7 +267,7 @@ footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule);
   <div class="stats">
     <div><b>$155</b><span>per 1,000 customers, e-mail everyone [$41, $269]</span></div>
     <div><b>$114</b><span>uplift procedure, e-mails 85% [$9, $219]</span></div>
-    <div><b>$142</b><span>response procedure, e-mails 92%</span></div>
+    <div><b>$142</b><span>response procedure, e-mails 93%</span></div>
     <div><b>$182</b><span>what an in-sample model contest would report</span></div>
   </div>
   <p>Thirty candidate rankings compete: five learners and two base models, trained on visits, conversions or spend. A model trained on dense visits might rank customers better for revenue than one trained on sparse revenue, so the choice is left to data, but to data the final score never sees. The candidates' merit barely replicates from one random half of the customers to the other: rank correlation 0.24 on spend, against 0.66 on visits. With 578 buyers, the best-looking model is mostly the luckiest one.</p>
@@ -378,8 +378,8 @@ function drawHero() {
   const up = ship[UPLIFT], bl = ship[BLANKET], rs = ship[RESPONSE];
   document.getElementById("hero-readout").innerHTML =
     `At a ${Math.round(m * 100)}% margin and $${c.toFixed(2)} per e-mail, e-mailing everyone earns <strong>${money(bl.v)}</strong> per 1,000 customers ` +
-    `(95% CI ${money(bl.v - bl.h)} to ${money(bl.v + bl.h)}). The uplift procedure e-mails <strong>${(100 * up.share).toFixed(0)}%</strong> and earns <strong>${money(up.v)}</strong>; ` +
-    `the response procedure e-mails ${(100 * rs.share).toFixed(0)}% and earns ${money(rs.v)}.`;
+    `(95% CI ${money(bl.v - bl.h)} to ${money(bl.v + bl.h)}). The uplift procedure e-mails <strong>${Math.round(100 * up.share)}%</strong> and earns <strong>${money(up.v)}</strong>; ` +
+    `the response procedure e-mails ${Math.round(100 * rs.share)}% and earns ${money(rs.v)}.`;
 }
 
 function drawCurves() {

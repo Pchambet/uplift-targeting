@@ -296,8 +296,8 @@ function drawHero() {
   const up = ship[UPLIFT], bl = ship[BLANKET], rs = ship[RESPONSE];
   document.getElementById("hero-readout").innerHTML =
     `At a ${Math.round(m * 100)}% margin and $${c.toFixed(2)} per e-mail, e-mailing everyone earns <strong>${money(bl.v)}</strong> per 1,000 customers ` +
-    `(95% CI ${money(bl.v - bl.h)} to ${money(bl.v + bl.h)}). The uplift procedure e-mails <strong>${(100 * up.share).toFixed(0)}%</strong> and earns <strong>${money(up.v)}</strong>; ` +
-    `the response procedure e-mails ${(100 * rs.share).toFixed(0)}% and earns ${money(rs.v)}.`;
+    `(95% CI ${money(bl.v - bl.h)} to ${money(bl.v + bl.h)}). The uplift procedure e-mails <strong>${Math.round(100 * up.share)}%</strong> and earns <strong>${money(up.v)}</strong>; ` +
+    `the response procedure e-mails ${Math.round(100 * rs.share)}% and earns ${money(rs.v)}.`;
 }
 
 function drawCurves() {
