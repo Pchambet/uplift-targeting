@@ -8,7 +8,7 @@ longer the binding constraint.
 Resource choices, made explicit because this runs on a laptop next to other
 jobs: DuckDB reads the gzip CSV once into Parquet (3 GB memory cap, 3 threads);
 the split is a hash of the features, so duplicate users never straddle train
-and test; models are fitted on a 2M-row reservoir sample of the training half
+and test; models are fitted on a hash-based third of the training half
 and evaluated on the *entire* held-out half (~7M rows).
 """
 
@@ -29,7 +29,7 @@ from uplift_targeting.metrics import grouped_area_interval, targeted_uplift
 
 CRITEO_SHA256 = "2716e1bf0fd157a93b5bf86924d9088419dfbac2022c6cd90030220634f616dc"
 FEATURES = [f"f{i}" for i in range(12)]
-TRAIN_ROWS = 2_000_000
+TRAIN_SAMPLE_MODULUS = 3  # one training-half row in three: about 2.3M rows
 N_GROUPS = 20  # random-groups CI: one pass over 7M rows instead of a bootstrap
 LGBM_OVERRIDES = {
     "n_estimators": 200,
@@ -133,11 +133,16 @@ def score() -> pd.DataFrame:
     build_parquet()
     cols = ", ".join([*FEATURES, "treatment", "visit", "conversion"])
     with connect() as con:
+        # Hash-based sample and a canonical sort: the same rows in the same order
+        # whatever the number of threads that wrote or read the Parquet file.
         train = con.execute(
-            f"SELECT {cols} FROM '{parquet_path()}' WHERE is_train "
-            f"USING SAMPLE reservoir({TRAIN_ROWS} ROWS) REPEATABLE ({config.SEED % 10_000})"
+            f"SELECT {cols} FROM '{parquet_path()}' "
+            f"WHERE is_train AND hash({cols}, 'train-sample') % {TRAIN_SAMPLE_MODULUS} = 0 "
+            f"ORDER BY {cols}"
         ).df()
-        test = con.execute(f"SELECT {cols} FROM '{parquet_path()}' WHERE NOT is_train").df()
+        test = con.execute(
+            f"SELECT {cols} FROM '{parquet_path()}' WHERE NOT is_train ORDER BY {cols}"
+        ).df()
     Xtr, ttr = train[FEATURES].to_numpy(np.float32), train["treatment"].to_numpy()
     Xte = test[FEATURES].to_numpy(np.float32)
     e = float(ttr.mean())
@@ -152,7 +157,12 @@ def score() -> pd.DataFrame:
     with connect() as con:
         con.register("scores", out)
         con.execute(f"COPY scores TO '{scores_path()}' (FORMAT parquet)")
+    meta_path().write_text(json.dumps({"n_train_sample": len(train)}))
     return out
+
+
+def meta_path() -> Path:
+    return config.DATA_INTERIM / "criteo_meta.json"
 
 
 def load_scores() -> pd.DataFrame:
@@ -201,7 +211,7 @@ def evaluate(scores: pd.DataFrame) -> dict:
     result = {
         "n_rows": int(summary["n"].sum()),
         "treatment_share": float(summary["n"].iloc[1] / summary["n"].sum()),
-        "n_train_sample": TRAIN_ROWS,
+        "n_train_sample": json.loads(meta_path().read_text())["n_train_sample"],
         "n_test": len(scores),
         "average_effects": average_effects(summary),
     }

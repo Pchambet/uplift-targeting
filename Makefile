@@ -1,5 +1,7 @@
 .PHONY: setup data run report test lint format all clean
 
+export PYTHONUNBUFFERED := 1
+
 setup:  ## install the locked environment
 	uv sync --locked
 
