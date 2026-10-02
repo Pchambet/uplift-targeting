@@ -74,6 +74,8 @@ input[type=range] { accent-color: var(--teal); width: 160px; }
 .table-wrap { overflow-x: auto; margin: 16px 0; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+tr.group th { color: var(--ink); font-weight: 600; padding-top: 16px; }
+.chart-fallback { color: var(--muted); font-size: 15px; border: 1px dashed var(--rule); border-radius: 8px; padding: 16px; }
 th { color: var(--muted); font-weight: 500; }
 td.num, th.num { text-align: right; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; margin: 24px 0; }
@@ -87,8 +89,12 @@ footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule);
   body { font-size: 16px; }
   main { padding-top: 32px; }
   .chart { height: 360px; } .chart.tall { height: 520px; }
+  .wide-only { display: none; }
+  th, td { padding: 7px 6px; }
+  td:first-child { white-space: normal; }
   .standfirst { font-size: 17px; }
 }
+@media (max-width: 639px) { #criteo { height: 680px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -96,12 +102,12 @@ footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule);
 <main>
 <header>
   <p class="repo"><a href="https://github.com/Pchambet/uplift-targeting">Pchambet / uplift-targeting</a></p>
-  <h1>E-mail the customers the e-mail moves, not the ones who would buy anyway</h1>
-  <p class="standfirst">A retailer e-mailed {{N}} customers at random: a Mens campaign, a Womens campaign, or nothing. The question a campaign team faces is whom to e-mail, and with which e-mail, so that the campaign earns money it would not have earned anyway. This page answers it with out-of-sample, uncertainty-aware estimates, and checks the method at scale on {{CRITEO_ROWS}} advertising users.</p>
+  <h1>Whom should a retailer e-mail? On this experiment, everyone.</h1>
+  <p class="standfirst">A retailer e-mailed {{N}} customers at random: a men's campaign, a women's campaign, or nothing. A campaign team wants to know whom to e-mail, and with which e-mail, so that the campaign earns money it would not have earned anyway. This page answers with out-of-sample, uncertainty-aware estimates, shows why a model contest scored on its own data would have promised more, and checks the method at scale on {{CRITEO_ROWS}} advertising users.</p>
 </header>
 
 <section aria-labelledby="hero-title">
-  <h2 id="hero-title" class="hero-title">On this experiment, no targeting rule beats e-mailing everyone</h2>
+  <h2 id="hero-title" class="hero-title">At the default economics, no targeting rule beats e-mailing everyone</h2>
   <div class="controls" role="group" aria-label="Unit economics">
     <label>Gross margin <input id="margin" type="range" min="0.2" max="0.8" step="0.05" value="{{MARGIN}}"> <output for="margin" id="margin-out"></output></label>
     <label>Cost per e-mail <input id="cost" type="range" min="0" max="0.4" step="0.01" value="{{COST}}"> <output for="cost" id="cost-out"></output></label>
@@ -109,17 +115,17 @@ footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule);
   <figure>
     <div id="hero" class="chart" role="img" aria-label="Incremental profit per 1,000 customers against the share of customers e-mailed, for the uplift policy, the response-model policy and random targeting"></div>
     <p class="readout-line" id="hero-readout" aria-live="polite"></p>
-    <figcaption>Incremental profit per 1,000 customers against the share e-mailed: doubly robust estimates with 95% bands. The uplift ranking is chosen on one half of the customers and scored on the other. Markers: the three procedures a team could ship, each choosing its own budget on held-out data. Move the sliders to re-price every curve.</figcaption>
+    <figcaption>Incremental profit per 1,000 customers against the share e-mailed: doubly robust estimates; dotted lines are the models' 95% CIs, the grey band random targeting's. The uplift policy picks the e-mail per customer, which is why it ends below the blanket point. The uplift ranking is chosen on one half of the customers and scored on the other. Markers: the three procedures a team could ship, each choosing its own budget on held-out data. Move the sliders to re-price every curve.</figcaption>
   </figure>
 </section>
 
 <section class="memo" aria-labelledby="memo-title">
   <h2 id="memo-title">Decision memo</h2>
   <ol>
-    <li>Send the Mens e-mail. It lifts conversion by {{MENS_CONV_PP}}, 95% CI {{MENS_CONV_CI}}, and spend by {{MENS_SPEND}} per customer, about twice the Womens e-mail ({{WOMENS_SPEND}}).</li>
-    <li>Send it to everyone while an e-mail costs less than about {{BREAK_EVEN_COST}} all-in. At {{COST_FMT}} it earns {{BLANKET_VALUE}} per 1,000 customers, 95% CI {{BLANKET_CI}}; the best uplift procedure earns {{UPLIFT_VALUE}}, CI {{UPLIFT_CI}}, a paired difference of {{UPLIFT_MINUS_BLANKET}}, CI {{UPLIFT_MINUS_BLANKET_CI}}.</li>
-    <li>Do not trust an in-sample model contest. Picking the best of 30 rankings and budgets on the evaluation data would have reported {{NAIVE_VALUE}} per 1,000, {{NAIVE_GAIN}} over blanket sending. The gain is selection noise.</li>
-    <li>Do not assume an uplift model beats a response model: test it on the experiment. Here the response model ranked as well as or better than every meta-learner, on Hillstrom and on {{CRITEO_ROWS}} Criteo users, where its top 20% holds {{CRITEO_TOP20_RESPONSE_SHARE}} of all incremental conversions against {{CRITEO_TOP20_DR_SHARE}} for the DR-learner. Uplift learners only help where the effect is decoupled from the baseline, as with the Womens e-mail, and even there the gain is within noise.</li>
+    <li>Send the men's e-mail. It lifts conversion by {{MENS_CONV_PP}}, 95% CI {{MENS_CONV_CI}}, and spend by {{MENS_SPEND}} per customer, about twice the women's e-mail ({{WOMENS_SPEND}}).</li>
+    <li>Send it to everyone while an e-mail costs less than about {{BLANKET_BREAK_EVEN}} all-in (the margin times its spend lift); above that, e-mail no one. Between {{PRICED_RANGE}} per e-mail, {{DETECTABLE_COSTS}} does a targeted procedure beat the better of the two with a 95% CI that excludes zero. At {{COST_FMT}}, blanket sending earns {{BLANKET_VALUE}} per 1,000 customers, 95% CI {{BLANKET_CI}}; the best uplift procedure earns {{UPLIFT_VALUE}}, a paired difference of {{UPLIFT_MINUS_BLANKET}}, CI {{UPLIFT_MINUS_BLANKET_CI}}. Over {{N_SPLITS}} random splits it averages {{SPLIT_MEAN_DIFF}} and falls short of blanket in {{SPLITS_BELOW}}.</li>
+    <li>Do not trust an in-sample model contest. Choosing among {{NAIVE_N}} rankings and their budgets on the evaluation data would have recommended {{NAIVE_IDEA}}, reporting {{NAIVE_GAIN}} per 1,000 over blanket sending. Chosen on one half and scored on the other, the same idea is {{NAIVE_OOS}}, 95% CI {{NAIVE_OOS_CI}}.</li>
+    <li>Do not assume an uplift model beats a response model: test it on the experiment. On Hillstrom visits the DR-learner {{DR_VS_RESPONSE_WOMENS}} the response model for the women's e-mail and {{DR_VS_RESPONSE_MENS}} it for the men's e-mail. On {{CRITEO_ROWS}} Criteo users the response model's top 20% holds {{CRITEO_TOP20_RESPONSE_SHARE}} of all incremental conversions, against {{CRITEO_TOP20_DR_SHARE}} for the DR-learner.</li>
   </ol>
 </section>
 
@@ -127,19 +133,19 @@ footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule);
   <h2 id="a-title"><span class="part">A</span>Did the experiment work, and what did it do on average?</h2>
   <p class="lede">The randomisation holds: arm sizes match the 1/3 design (chi-square p = {{SRM_P}}) and every covariate is balanced (largest absolute standardised difference {{MAX_SMD}}, against a usual alarm level of 0.1). Both e-mails work on average.</p>
   <div class="stats">
-    <div><b>{{MENS_VISIT_PP}}</b><span>visit rate, Mens e-mail</span></div>
-    <div><b>{{MENS_CONV_PP}}</b><span>conversion, Mens e-mail ({{MENS_CONV_LIFT}} relative)</span></div>
-    <div><b>{{MENS_SPEND}}</b><span>spend per customer, Mens e-mail</span></div>
-    <div><b>{{WOMENS_SPEND}}</b><span>spend per customer, Womens e-mail</span></div>
+    <div><b>{{MENS_VISIT_PP}}</b><span>visit rate, men's e-mail</span></div>
+    <div><b>{{MENS_CONV_PP}}</b><span>conversion, men's e-mail ({{MENS_CONV_LIFT}} relative)</span></div>
+    <div><b>{{MENS_SPEND}}</b><span>spend per customer, men's e-mail</span></div>
+    <div><b>{{WOMENS_SPEND}}</b><span>spend per customer, women's e-mail</span></div>
   </div>
   <h3>Average effects, three estimators</h3>
   <p>Variance reduction barely helps here. CUPED on past-year spend narrows the spend interval by {{CUPED_SPEND_SHRINK}}; the fully interacted regression adjustment of Lin (2013) narrows the visit interval by {{LIN_VISIT_SHRINK}}. A year of purchase history explains almost nothing of a two-week window, so the plain difference in means is the honest headline.</p>
   <div class="table-wrap"><table>
-    <thead><tr><th>E-mail</th><th>Outcome</th><th>Estimator</th><th class="num">Effect</th><th class="num">95% CI</th><th class="num">SE ratio</th></tr></thead>
+    <thead><tr><th>Estimator</th><th class="num">Effect</th><th class="num">95% CI</th><th class="num wide-only">SE ratio</th></tr></thead>
     <tbody>{{ATE_ROWS}}</tbody>
   </table></div>
   <h3>Pre-declared segments</h3>
-  <p>Five segment dimensions were declared before any model was fitted and tested once per e-mail and outcome: 30 heterogeneity tests, Holm-corrected. {{HOLM_SURVIVORS}} survive, both on visits and both on product line: the Womens e-mail barely moves customers who only ever bought menswear. Purchases and spend show no detectable heterogeneity at this sample size.</p>
+  <p>Five segment dimensions were declared before any model was fitted and tested once per e-mail and outcome: {{N_TESTS}} heterogeneity tests, Holm-corrected. {{HOLM_SURVIVORS}} survive, all on {{HOLM_OUTCOMES}}: {{HOLM_SURVIVOR_TEXT}}. Purchases and spend show no detectable heterogeneity at this sample size.</p>
   <div class="toggle" role="group" aria-label="Segment outcome" data-target="segments">
     <button type="button" data-value="visit" aria-pressed="true">Visit</button>
     <button type="button" data-value="conversion" aria-pressed="false">Conversion</button>
@@ -163,7 +169,7 @@ footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule);
     <div id="curves" class="chart" role="img" aria-label="Uplift curves of each model for the selected e-mail and outcome"></div>
     <figcaption>Uplift curves from out-of-fold LightGBM scores: height at x is the incremental outcome per 1,000 customers if the top x% by the model were e-mailed. Dashed: random targeting.</figcaption>
   </figure>
-  <p>Where heterogeneity exists, the models find it: for the Womens e-mail, the DR-learner's Qini coefficient on visits is {{QINI_WOMENS_VISIT}} (×1,000, bootstrap 95% CI), clearly above random. But the plain response model finds most of it too ({{QINI_WOMENS_VISIT_RESPONSE}}); the paired difference, DR-learner minus response, is {{QINI_DIFF_WOMENS_VISIT}}. For the Mens e-mail the DR-learner is no better than random ({{QINI_MENS_VISIT}}) and the response model ranks better ({{QINI_DIFF_MENS_VISIT}}): that e-mail's effect grows with the customer's baseline propensity. On spend, {{SPEND_QINI_SIGNIFICANT}} rankings have a Qini interval that excludes zero.</p>
+  <p>Where the effect is decoupled from the baseline, as with the women's e-mail, the uplift learners find it: the DR-learner's Qini coefficient on visits is {{QINI_WOMENS_VISIT}} (×1,000, bootstrap 95% CI), clearly above random. The plain response model finds much of it too ({{QINI_WOMENS_VISIT_RESPONSE}}): paired on the same bootstrap draws, the DR-learner {{DR_VS_RESPONSE_WOMENS}} it ({{QINI_DIFF_WOMENS_VISIT}}), although {{WOMENS_VISIT_ABOVE_RESPONSE}} uplift learners score above it on point estimate. Where the effect grows with the baseline, as with the men's e-mail, the DR-learner is no better than random ({{QINI_MENS_VISIT}}), {{DR_VS_RESPONSE_MENS}} the response model ({{QINI_DIFF_MENS_VISIT}}), and only {{MENS_VISIT_ABOVE_RESPONSE}} uplift learners score above the response model. On spend, {{SPEND_QINI_SIGNIFICANT}} rankings have a Qini interval that excludes zero, and {{MENS_SPEND_QINI_NEGATIVE}} point estimates for the men's e-mail are negative.</p>
   <details>
     <summary>Qini coefficients of every model (×1,000, bootstrap 95% CI)</summary>
     <div class="table-wrap"><table>
@@ -172,27 +178,28 @@ footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule);
     </table></div>
   </details>
   <h3>Where the response model wastes contacts</h3>
-  <p>For the Womens e-mail, the response model ranks customers by how likely they are to visit, so its top deciles are full of people who would have come anyway. In its top 20%, {{ANYWAY_RESPONSE}} of the e-mailed visitors would have visited without the e-mail, against {{ANYWAY_UPLIFT}} for the uplift model, which buys {{TOP20_LIFT_UPLIFT}} of extra visit rate there against {{TOP20_LIFT_RESPONSE}}.</p>
+  <p>For the women's e-mail, the response model ranks customers by how likely they are to visit, so its top deciles are full of people who would have come anyway. In its top 20%, {{ANYWAY_RESPONSE}} of the e-mailed visitors would have visited without the e-mail, against {{ANYWAY_UPLIFT}} in the top 20% of the uplift ranking (T-learner, LightGBM), which buys {{TOP20_LIFT_UPLIFT}} of extra visit rate there against {{TOP20_LIFT_RESPONSE}}. Reading the control rate as "would have come anyway" assumes the e-mail deters no one.</p>
   <figure>
     <div id="deciles" class="chart short" role="img" aria-label="Visit rate without e-mail and extra visits from the Womens e-mail, by score decile, for the response model and the uplift model"></div>
-    <figcaption>Womens e-mail. Grey: visit rate of control customers in the decile. Colour: incremental visit rate caused by the e-mail, 95% CI. Design-based: the models only decide the ranking.</figcaption>
+    <figcaption>Women's e-mail; uplift ranking from the T-learner (LightGBM). Grey: visit rate of control customers in the decile. Colour: incremental visit rate caused by the e-mail, 95% CI. Design-based: the models only decide the ranking.</figcaption>
   </figure>
 </section>
 
 <section aria-labelledby="c-title">
   <h2 id="c-title"><span class="part">C</span>Which policy should ship?</h2>
-  <p class="lede">The decision is scored on spend, the outcome profit depends on. Every policy value is a doubly robust off-policy estimate on customers that neither trained the models nor chose the policy, with a paired standard error for every comparison.</p>
+  <p class="lede">The decision is scored on spend, because profit depends on spend. Every policy value is a doubly robust off-policy estimate on customers that neither trained the models nor chose the policy, with a paired standard error for every comparison.</p>
   <div class="stats">
     <div><b>{{BLANKET_VALUE}}</b><span>per 1,000 customers, e-mail everyone {{BLANKET_CI}}</span></div>
     <div><b>{{UPLIFT_VALUE}}</b><span>uplift procedure, e-mails {{UPLIFT_SHARE}} {{UPLIFT_CI}}</span></div>
-    <div><b>{{RESPONSE_VALUE}}</b><span>response procedure, e-mails {{RESPONSE_SHARE}}</span></div>
+    <div><b>{{RESPONSE_VALUE}}</b><span>response procedure, e-mails {{RESPONSE_SHARE}} {{RESPONSE_CI}}</span></div>
     <div><b>{{NAIVE_VALUE}}</b><span>what an in-sample model contest would report</span></div>
   </div>
-  <p>Thirty candidate rankings compete: five learners and two base models, trained on visits, conversions or spend. A model trained on dense visits might rank customers better for revenue than one trained on sparse revenue, so the choice is left to data, but to data the final score never sees. The candidates' merit barely replicates from one random half of the customers to the other: rank correlation {{RHO_SPEND}} on spend, against {{RHO_VISIT}} on visits. With 578 buyers, the best-looking model is mostly the luckiest one.</p>
+  <p>{{N_CANDIDATES}} candidate rankings compete: five learners and two base models, trained on visits, conversions or spend. A model trained on dense visits might rank customers better for revenue than one trained on sparse revenue, so the choice is left to data, but to data the final score never sees. The candidates' merit barely replicates from one random half of the customers to the other: rank correlation {{RHO_SPEND}} on spend, against {{RHO_VISIT}} on visits. With {{N_BUYERS}} buyers, the best-looking model is mostly the luckiest one.</p>
   <figure>
     <div id="selection" class="chart short" role="img" aria-label="Average incremental spend of each candidate ranking on one half of customers against the other half"></div>
-    <figcaption>Each dot is a candidate ranking, scored on two random halves (average incremental spend per 1,000 customers over budgets). Points far from a rising line mean the ranking does not replicate.</figcaption>
+    <figcaption>Each dot is a candidate ranking, scored on two random halves (average incremental spend per 1,000 customers over budgets). Dotted: equal value on both halves. Half B happens to show a larger spend effect, so the dots sit above the line; what matters is whether their order agrees, and it barely does.</figcaption>
   </figure>
+  <p>The table values come from one random split of the customers, and their intervals are conditional on the rankings and budgets that split selected. Re-running the whole procedure on {{N_SPLITS}} random splits, the uplift procedure averages {{SPLIT_MEAN_DIFF}} per 1,000 against blanket sending (from {{SPLIT_RANGE}}), falls short of it in {{SPLITS_BELOW}} splits, e-mails a median {{SPLIT_SHARE_MEDIAN}} of customers ({{SPLIT_SHARE_RANGE}}), and settles on {{SPLIT_DISTINCT}} different rankings along the way.</p>
 </section>
 
 <section aria-labelledby="d-title">
@@ -202,7 +209,7 @@ footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule);
     <div id="criteo" class="chart" role="img" aria-label="Uplift curves on the Criteo held-out half for visits and conversions"></div>
     <figcaption>Incremental outcomes per 1,000 users when the top x% by each model is treated, pointwise 95% bands. Dashed: random targeting.</figcaption>
   </figure>
-  <p>At this size every ranking beats random by a wide margin, and the effect is concentrated: the top 10% of users by the response model hold {{CRITEO_TOP10_VISIT_SHARE}} of all incremental visits. Their untreated visit rate is {{CRITEO_TOP_DECILE_BASE}} and treatment adds {{CRITEO_TOP_DECILE_LIFT}}: here the effect tracks the baseline rate, so ranking by "who will act" is also ranking by "who will be moved". The response model is the best uplift ranker (Qini ×1,000 on conversions: {{CRITEO_QINI_CONV_RESPONSE}}, against {{CRITEO_QINI_CONV_T}} for the T-learner and {{CRITEO_QINI_CONV_DR}} for the DR-learner). The meta-learners pay for estimating a small difference between two large, noisy predictions; with 15% controls and 0.3% conversions, the DR-learner's final stage even returns the same score for {{CRITEO_DR_TIE}} of users.</p>
+  <p>At this size every ranking beats random by a wide margin, and the effect is concentrated: the top 10% of users by the response model hold {{CRITEO_TOP10_VISIT_SHARE}} of all incremental visits. Their untreated visit rate is {{CRITEO_TOP_DECILE_BASE}} and treatment adds {{CRITEO_TOP_DECILE_LIFT}}: here the effect tracks the baseline rate, so ranking by "who will act" is also ranking by "who will be moved". The response model is the best uplift ranker (Qini ×1,000 on conversions: {{CRITEO_QINI_CONV_RESPONSE}}, against {{CRITEO_QINI_CONV_T}} for the T-learner and {{CRITEO_QINI_CONV_DR}} for the DR-learner). The meta-learners pay for estimating a small difference between two large, noisy predictions; with {{CRITEO_CONTROL_SHARE}} controls and a control conversion rate of {{CRITEO_CONV_CONTROL_RATE}}, the DR-learner's final stage returns the same score for {{CRITEO_DR_TIE}} of users. The {{CRITEO_DR_NEG_SHARE}} of users it scores below zero convert at {{CRITEO_DR_NEG_BASE}} without treatment, against {{CRITEO_CONV_CONTROL_RATE}} overall, and gain {{CRITEO_DR_NEG_UPLIFT}} when treated: high-baseline users whose noisy pseudo-outcomes pushed their scores below zero. They hold {{CRITEO_DR_TAIL}} of all incremental conversions, which is why its curve jumps in the last 1%.</p>
 </section>
 
 <section aria-labelledby="m-title">
@@ -211,9 +218,9 @@ footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule);
     <li><b>Out-of-sample by construction.</b> Five outer folds; every score comes from models fitted without that customer. The DR-learner cross-fits its own nuisance models inside the training folds. A test scrambles held-out outcomes and checks that held-out scores do not move.</li>
     <li><b>Known propensities.</b> Assignment probabilities are fixed by design (1/3 per arm), so IPW and doubly robust policy values are unbiased without a propensity model. Tests check both on synthetic data, the DR one with a deliberately wrong outcome model.</li>
     <li><b>Selection is part of the model.</b> Ranking and budget are chosen on one random half and applied to the other; the two halves are pooled.</li>
-    <li><b>Uncertainty.</b> Qini intervals are a Poisson bootstrap over customers with scores held fixed: they cover evaluation noise, not retraining noise. Policy intervals are normal approximations on per-customer doubly robust scores.</li>
+    <li><b>Uncertainty.</b> Qini intervals are a Poisson bootstrap over customers with scores held fixed: they cover evaluation noise, not retraining noise. Policy intervals are normal approximations on per-customer doubly robust scores, conditional on the rankings and budgets one split selected; the {{N_SPLITS}}-split repeat shows the selection noise they leave out.</li>
     <li><b>Assumed economics.</b> The data has no margins or costs. The defaults ({{MARGIN_FMT}} gross margin, {{COST_FMT}} per e-mail including fatigue and unsubscribe risk) are assumptions; the sliders show the conclusions under others.</li>
-    <li><b>Limits.</b> One two-week campaign from 2008 with 578 buyers; spend is heavy-tailed. Criteo features are anonymised, its labels are visits and conversions (not revenue), and its Qini intervals use 20 random groups of the held-out half instead of a bootstrap. A multiplicative model (response × relative lift) was not tried and would likely close the Criteo gap.</li>
+    <li><b>Limits.</b> One two-week campaign from 2008 with 578 buyers; spend is heavy-tailed. Criteo features are anonymised, its labels are visits and conversions (not revenue), and its Qini intervals use 20 random groups of the held-out half instead of a bootstrap. A multiplicative model (response × relative lift) was not tried.</li>
   </ul>
 </section>
 
@@ -228,11 +235,17 @@ const DATA = {{DATA}};
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const UPLIFT = "Uplift model (cross-selected)", RESPONSE = "Response model", RANDOM = "Random (Mens e-mail)", BLANKET = "Blanket Mens e-mail";
 const POLICIES = [
-  {key: UPLIFT, label: "Uplift model", color: "--teal", band: "--band-teal", dash: "solid"},
+  {key: UPLIFT, label: "Uplift model (e-mail chosen per customer)", color: "--teal", band: "--band-teal", dash: "solid"},
   {key: RESPONSE, label: "Response model", color: "--amber", band: "--band-amber", dash: "solid"},
-  {key: RANDOM, label: "Random (Mens e-mail)", color: "--slate", band: "--band-slate", dash: "dash"},
+  {key: RANDOM, label: "Random (men's e-mail)", color: "--slate", band: "--band-slate", dash: "dash"},
 ];
 const CONFIG = {displayModeBar: false, responsive: true};
+const HAS_PLOTLY = typeof Plotly !== "undefined";
+function plot(id, traces, lay) { if (HAS_PLOTLY) Plotly.react(id, traces, lay, CONFIG); }
+if (!HAS_PLOTLY) document.querySelectorAll(".chart").forEach((el) => {
+  el.style.height = "auto";
+  el.innerHTML = '<p class="chart-fallback">This chart needs plotly.js from cdn.jsdelivr.net, which did not load. The same results are drawn as static figures in the repository README.</p>';
+});
 const money = (v) => (v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US", {maximumFractionDigits: 0});
 const state = {segments: "visit", curves: "Womens e-mail|visit"};
 
@@ -259,6 +272,20 @@ function nearestRatio(ratio) {
   return ratios.reduce((a, b) => (Math.abs(b - ratio) < Math.abs(a - ratio) ? b : a));
 }
 
+// The heading follows the sliders: which of "everyone" and "no one" wins, and whether
+// a targeted procedure beats both with a paired 95% CI that excludes zero.
+function heroVerdict(ship, m, c) {
+  const econ = `At a ${Math.round(m * 100)}% margin and $${c.toFixed(2)} per e-mail`;
+  const best = ship[BLANKET].v >= 0 ? "e-mailing everyone" : "e-mailing no one";
+  const name = (k) => (k === UPLIFT ? "the uplift procedure" : "the response procedure");
+  const targeted = [UPLIFT, RESPONSE];
+  const wins = targeted.filter((k) => ship[k].v - ship[k].h > 0 && ship[k].d - ship[k].dh > 0);
+  if (wins.length) return `${econ}, ${name(wins[0])} beats both e-mailing everyone and no one`;
+  const ahead = targeted.filter((k) => ship[k].v > Math.max(ship[BLANKET].v, 0));
+  if (ahead.length) return `${econ}, ${name(ahead[0])} edges ahead of ${best}, within noise`;
+  return `${econ}, no targeting rule beats ${best}`;
+}
+
 function drawHero() {
   const m = +document.getElementById("margin").value, c = +document.getElementById("cost").value;
   document.getElementById("margin-out").textContent = Math.round(m * 100) + "%";
@@ -269,7 +296,10 @@ function drawHero() {
     const x = rows.map((r) => 100 * r.share);
     const price = (v, r) => m * v - 1000 * c * r.share;
     const y = rows.map((r) => price(r.value_per_1000, r)), lo = rows.map((r) => price(r.low, r)), hi = rows.map((r) => price(r.high, r));
-    traces.push(band(x, lo, hi, p.band));
+    // Only random targeting gets a filled band; the models' CIs are thin dashed edges,
+    // so overlapping intervals stay readable.
+    if (p.key === RANDOM) traces.push(band(x, lo, hi, p.band));
+    else for (const edge of [lo, hi]) traces.push({x, y: edge, mode: "lines", line: {color: css(p.color), width: 1, dash: "dot"}, hoverinfo: "skip", showlegend: false});
     traces.push({x, y, name: p.label, mode: "lines", line: {color: css(p.color), width: 2.4, dash: p.dash},
       customdata: lo.map((l, i) => [l, hi[i]]),
       hovertemplate: "%{x:.0f}% e-mailed: %{y:$,.0f} per 1,000<br>95% CI %{customdata[0]:$,.0f} to %{customdata[1]:$,.0f}<extra>" + p.label + "</extra>"});
@@ -278,7 +308,8 @@ function drawHero() {
   const ship = {};
   for (const r of DATA.byCost.filter((r) => r.cost_over_margin === ratio)) {
     const v = m * r.spend_per_1000 - 1000 * c * r.share_emailed;
-    ship[r.policy] = {share: r.share_emailed, v, h: 1.96 * m * r.se_per_1000};
+    ship[r.policy] = {share: r.share_emailed, v, h: 1.96 * m * r.se_per_1000,
+      d: m * r.minus_blanket_per_1000 - 1000 * c * (r.share_emailed - 1), dh: 1.96 * m * r.minus_blanket_se_per_1000};
   }
   const markers = [[UPLIFT, "--teal", "diamond", "Ship: uplift procedure"], [RESPONSE, "--amber", "square", "Ship: response procedure"], [BLANKET, "--slate", "circle", "Ship: e-mail everyone"]];
   for (const [key, color, symbol, label] of markers) {
@@ -288,11 +319,12 @@ function drawHero() {
       error_y: {type: "data", array: [s.h], color: css(color), thickness: 1.4, width: 4},
       hovertemplate: label + "<br>%{x:.0f}% e-mailed: %{y:$,.0f} per 1,000<extra></extra>"});
   }
-  Plotly.react("hero", traces, layout({
+  plot("hero", traces, layout({
     xaxis: axis(narrow() ? "Share e-mailed" : "Customers e-mailed (% of base, ranked by each policy)", {range: [0, 102], ticksuffix: "%"}),
     yaxis: axis(narrow() ? "Profit per 1,000 ($)" : "Incremental profit per 1,000 customers ($)", {tickprefix: "$", zerolinecolor: css("--ink")}),
     hovermode: "closest", margin: {l: narrow() ? 52 : 64, r: 12, t: narrow() ? 132 : 76, b: 52},
-  }), CONFIG);
+  }));
+  document.getElementById("hero-title").textContent = heroVerdict(ship, m, c);
   const up = ship[UPLIFT], bl = ship[BLANKET], rs = ship[RESPONSE];
   document.getElementById("hero-readout").innerHTML =
     `At a ${Math.round(m * 100)}% margin and $${c.toFixed(2)} per e-mail, e-mailing everyone earns <strong>${money(bl.v)}</strong> per 1,000 customers ` +
@@ -314,10 +346,10 @@ function drawCurves() {
   const end = rows.find((r) => r.model === "DR-learner" && r.fraction === 1).gain_per_1000;
   traces.unshift({x: [0, 100], y: [0, end], name: "Random", mode: "lines", line: {color: css("--slate"), dash: "dash", width: 1.4}, hoverinfo: "skip"});
   const unit = (outcome === "spend" ? "Extra $ spend" : `Extra ${outcome}s`) + " per 1,000";
-  Plotly.react("curves", traces, layout({
-    xaxis: axis(narrow() ? "Share e-mailed" : "Customers e-mailed (% of base, ranked by model)", {ticksuffix: "%", range: [0, 100]}),
+  plot("curves", traces, layout({
+    xaxis: axis(narrow() ? "Share e-mailed" : "Customers e-mailed (% of base, ranked by model)", {ticksuffix: "%", range: [0, 101], dtick: 20}),
     yaxis: axis(unit, {zerolinecolor: css("--ink")}),
-  }), CONFIG);
+  }));
 }
 
 function drawDeciles() {
@@ -329,15 +361,15 @@ function drawDeciles() {
       error_y: {type: "data", symmetric: false, array: d.map((r) => 100 * (r.uplift_high - r.uplift)), arrayminus: d.map((r) => 100 * (r.uplift - r.uplift_low)), color: css("--muted"), thickness: 1, width: 2},
       hovertemplate: "Decile %{x}: %{y:.1f} pp<extra>Extra from e-mail</extra>"});
   });
-  Plotly.react("deciles", traces, layout({
+  plot("deciles", traces, layout({
     barmode: "group", bargap: 0.25, grid: {rows: 1, columns: 2, pattern: "independent"},
     xaxis: axis("Response-model decile (1 = top)", {dtick: 1}), xaxis2: axis("Uplift-model decile (1 = top)", {dtick: 1}),
     yaxis: axis("Visit rate (%)"), yaxis2: axis("", {matches: "y"}),
-  }), CONFIG);
+  }));
 }
 
 function drawSegments() {
-  const names = {purchase_history: "Bought", newbie: "Customer", channel: "Channel", zip_code: "Area", history_tier: "Spend"};
+  const names = {purchase_history: "Bought", newbie: "Customer", channel: "Channel", zip_code: "Area", history_tier: "Past-year spend"};
   const rows = DATA.segments.filter((r) => r.outcome === state.segments);
   const traces = [["Mens e-mail", "--teal"], ["Womens e-mail", "--amber"]].map(([arm, color]) => {
     const d = rows.filter((r) => r.arm === arm);
@@ -346,11 +378,11 @@ function drawSegments() {
       error_x: {type: "data", symmetric: false, array: d.map((r) => 100 * (r.high - r.estimate)), arrayminus: d.map((r) => 100 * (r.estimate - r.low)), color: css(color), thickness: 1.4, width: 0},
       hovertemplate: "%{y}<br>%{x:.2f} pp<extra>" + arm + "</extra>"};
   });
-  Plotly.react("segments", traces, layout({
+  plot("segments", traces, layout({
     margin: {l: narrow() ? 130 : 170, r: 12, t: 40, b: 52}, scattermode: "group",
     xaxis: axis(`Effect on ${state.segments} rate (percentage points)`, {zerolinecolor: css("--ink")}),
     yaxis: axis("", {autorange: "reversed", tickfont: {color: css("--ink-2"), size: 12}}),
-  }), CONFIG);
+  }));
 }
 
 function drawSelection() {
@@ -362,14 +394,17 @@ function drawSelection() {
       marker: {color: css(color), size: 9, line: {color: css("--bg"), width: 1}},
       text: d.map((r) => `${r.learner}, ${r.base}`), hovertemplate: "%{text}<br>Half A: $%{x:.0f} · Half B: $%{y:.0f}<extra></extra>"};
   });
-  Plotly.react("selection", traces, layout({
+  const values = rows.flatMap((r) => [r.half0_per_1000, r.half1_per_1000]);
+  const lo = Math.min(...values), hi = Math.max(...values);
+  traces.unshift({x: [lo, hi], y: [lo, hi], name: "Equal on both halves", mode: "lines", line: {color: css("--slate"), dash: "dot", width: 1.2}, hoverinfo: "skip"});
+  plot("selection", traces, layout({
     xaxis: axis("Half A: incremental spend per 1,000 ($)"), yaxis: axis("Half B: incremental spend per 1,000 ($)"),
-  }), CONFIG);
+  }));
 }
 
 function drawCriteo() {
   const models = [["T-learner", "--neutral-bar", null], [RESPONSE, "--amber", "--band-amber"], ["DR-learner", "--teal", "--band-teal"]];
-  const traces = [];
+  const traces = [], stacked = narrow();
   [["visit", "x", "y"], ["conversion", "x2", "y2"]].forEach(([outcome, xa, ya], i) => {
     const rows = DATA.criteo.filter((r) => r.outcome === outcome);
     for (const [model, color, bandColor] of models) {
@@ -381,11 +416,12 @@ function drawCriteo() {
     const end = rows.find((r) => r.model === "DR-learner" && r.fraction === 1).gain_per_1000;
     traces.push({x: [0, 100], y: [0, end], name: "Random", mode: "lines", line: {color: css("--slate"), dash: "dash", width: 1.3}, xaxis: xa, yaxis: ya, showlegend: i === 0, legendgroup: "random", hoverinfo: "skip"});
   });
-  Plotly.react("criteo", traces, layout({
-    grid: {rows: 1, columns: 2, pattern: "independent"},
-    xaxis: axis("Users targeted: visits", {ticksuffix: "%"}), xaxis2: axis("Users targeted: conversions", {ticksuffix: "%"}),
-    yaxis: axis("Incremental outcomes per 1,000 users"), yaxis2: axis(""),
-  }), CONFIG);
+  plot("criteo", traces, layout({
+    grid: stacked ? {rows: 2, columns: 1, pattern: "independent", ygap: 0.28} : {rows: 1, columns: 2, pattern: "independent"},
+    xaxis: axis("Users targeted (%)", {ticksuffix: "%", range: [0, 101], dtick: 20}),
+    xaxis2: axis("Users targeted (%)", {ticksuffix: "%", range: [0, 101], dtick: 20}),
+    yaxis: axis("Extra visits per 1,000"), yaxis2: axis("Extra conversions per 1,000"),
+  }));
 }
 
 const DRAW = {segments: drawSegments, curves: drawCurves};

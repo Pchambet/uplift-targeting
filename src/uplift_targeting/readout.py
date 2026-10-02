@@ -85,8 +85,12 @@ def segment_table(exp: Experiment) -> tuple[pd.DataFrame, pd.DataFrame]:
         for outcome in config.OUTCOMES:
             y = exp.outcomes[outcome].to_numpy()[mask]
             for dim in config.SEGMENTS:
-                seg = exp.raw[dim][mask].replace(SEGMENT_LABELS.get(dim, {})).astype(str)
+                labels = SEGMENT_LABELS.get(dim, {})
+                seg = exp.raw[dim][mask].replace(labels).astype(str)
                 table, test = segment_effects(y, t, seg.reset_index(drop=True))
+                if dim == "history_tier":  # tiers in spend order, not in string order
+                    order = [v for v in labels.values() if v in set(table["level"])]
+                    table = table.set_index("level").loc[order].reset_index()
                 key = {"arm": config.ARM_LABELS[arm], "outcome": outcome, "dimension": dim}
                 level_rows += [{**key, **row} for row in table.to_dict("records")]
                 test_rows.append({**key, **test})
@@ -119,6 +123,7 @@ def run(exp: Experiment) -> dict:
     tests.to_csv(config.RESULTS / "heterogeneity_tests.csv", index=False)
     summary = {
         "n": exp.n,
+        "n_buyers": int(exp.outcomes["conversion"].sum()),
         "srm": srm,
         "max_abs_smd": float(balance.drop(columns="covariate").abs().max().max()),
         "n_heterogeneity_tests": len(tests),

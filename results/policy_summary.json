@@ -185,7 +185,20 @@
     "naive_in_sample": {
       "choice": "T-learner | linear | conversion",
       "share": 1.0,
-      "value_per_1000": 182.35362663167024
+      "value_per_1000": 182.35362663167305,
+      "n_rankings": 31
+    },
+    "split_robustness": {
+      "n_splits": 50,
+      "uplift_minus_blanket_mean": -40.683761893914934,
+      "uplift_minus_blanket_min": -88.97378872350637,
+      "uplift_minus_blanket_max": 8.595103174255618,
+      "n_below_blanket": 48,
+      "uplift_mean_per_1000": 114.72281961020347,
+      "uplift_share_median": 0.8,
+      "uplift_share_min": 0.524984375,
+      "uplift_share_max": 1.0,
+      "n_distinct_selections": 16
     }
   }
 }

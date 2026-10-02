@@ -13,11 +13,19 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.axes import Axes
 from scipy.stats import spearmanr
 
 from uplift_targeting import config
 from uplift_targeting.evaluation import BLANKET, RANDOM, RESPONSE, UPLIFT
-from uplift_targeting.narrative import read_json, read_table, signed_money
+from uplift_targeting.narrative import (
+    cost_table,
+    criteo_numbers,
+    policy_numbers,
+    read_json,
+    read_table,
+    signed_money,
+)
 
 INK, TEAL, AMBER, SLATE, GRID = "#0f172a", "#0d9488", "#d97706", "#64748b", "#e2e8f0"
 LIGHT = "#cbd5e1"
@@ -26,7 +34,7 @@ SHORT_DIM = {
     "newbie": "Customer",
     "channel": "Channel",
     "zip_code": "Area",
-    "history_tier": "Spend",
+    "history_tier": "Past-year spend",
 }
 
 
@@ -73,12 +81,28 @@ def _headline(fig: plt.Figure, title: str, subtitle: str, y: float = 0.98) -> No
     fig.text(0.01, y - 0.075, subtitle, ha="left", va="top", fontsize=9.5, color=SLATE)
 
 
-def _band(ax, x, y, low, high, color, label=None, ls="-", lw=2.2):
+def _band(
+    ax: Axes,
+    x: pd.Series,
+    y: pd.Series,
+    low: pd.Series,
+    high: pd.Series,
+    color: str,
+    label: str | None = None,
+    ls: str = "-",
+    lw: float = 2.2,
+) -> None:
     ax.fill_between(x, low, high, color=color, alpha=0.13, lw=0)
     ax.plot(x, y, color=color, lw=lw, ls=ls, label=label)
 
 
-def _end_label(ax, x, y, text, color, dy=0):
+def _edges(ax: Axes, x: pd.Series, low: pd.Series, high: pd.Series, color: str) -> None:
+    """A CI drawn as two thin dashed edges, so several intervals can overlap legibly."""
+    for edge in (low, high):
+        ax.plot(x, edge, color=color, lw=0.8, ls=(0, (3, 2)), alpha=0.9)
+
+
+def _end_label(ax: Axes, x: float, y: float, text: str, color: str, dy: float = 0) -> None:
     ax.annotate(
         text,
         (x, y),
@@ -107,26 +131,39 @@ def hero() -> Path:
     cs = read_json("criteo_summary.json")
     fig, (left, right) = plt.subplots(1, 2, figsize=(12.5, 5.4), gridspec_kw={"wspace": 0.3})
 
-    styles = {
-        UPLIFT: (TEAL, "-", "Uplift model"),
-        RESPONSE: (AMBER, "-", "Response model"),
-        RANDOM: (SLATE, "--", "Random"),
-    }
-    for policy, (color, ls, label) in styles.items():
+    rnd = df[df["policy"] == RANDOM].sort_values("share")
+    _band(
+        left,
+        100 * rnd["share"],
+        rnd["value_per_1000"],
+        rnd["low"],
+        rnd["high"],
+        SLATE,
+        label="Random (men's e-mail)",
+        ls="--",
+        lw=1.6,
+    )
+    for policy, color, label in (
+        (UPLIFT, TEAL, "Uplift model (e-mail chosen per customer)"),
+        (RESPONSE, AMBER, "Response model (men's e-mail)"),
+    ):
         d = df[df["policy"] == policy].sort_values("share")
         x = 100 * d["share"]
-        _band(left, x, d["value_per_1000"], d["low"], d["high"], color, label=label, ls=ls)
-    left.legend(loc="upper left", fontsize=9)
+        left.plot(x, d["value_per_1000"], color=color, lw=2.3, label=label)
+        _edges(left, x, d["low"], d["high"], color)
+    left.legend(loc="upper left", fontsize=8.5)
     left.axhline(0, color=INK, lw=0.8)
     blanket = s["spend"]["deployable"][BLANKET]
     left.annotate(
         f"E-mailing everyone: ${blanket['value_per_1000']:,.0f}\n"
         f"(95% CI ${blanket['low']:,.0f} to ${blanket['high']:,.0f})",
         (100, blanket["value_per_1000"]),
-        xytext=(-150, 62),
+        xytext=(-6, -88),
         textcoords="offset points",
+        ha="right",
         fontsize=9,
         color=INK,
+        bbox={"boxstyle": "square,pad=0.2", "fc": "white", "ec": "none", "alpha": 0.9},
         arrowprops={"arrowstyle": "-", "color": SLATE, "lw": 0.8},
     )
     left.set_xlim(0, 100)
@@ -155,6 +192,18 @@ def hero() -> Path:
         color=INK,
         arrowprops={"arrowstyle": "-", "color": SLATE, "lw": 0.8},
     )
+    tail = criteo_numbers()["CRITEO_DR_TAIL"]
+    dr = criteo[criteo["model"] == "DR-learner"].set_index("fraction")["gain_per_1000"]
+    right.annotate(
+        f"Bottom 1% by DR score:\n{tail} of incremental conversions",
+        (99, dr[0.99]),
+        xytext=(-128, -80),
+        textcoords="offset points",
+        fontsize=8.5,
+        color=TEAL,
+        bbox={"boxstyle": "square,pad=0.2", "fc": "white", "ec": "none", "alpha": 0.9},
+        arrowprops={"arrowstyle": "-", "color": TEAL, "lw": 0.8},
+    )
     right.set_xlim(0, 100)
     right.set_ylim(bottom=0)
     right.set_xlabel("Users targeted (% of held-out half, ranked by each model)")
@@ -164,15 +213,17 @@ def hero() -> Path:
     )
 
     gain = s["spend"]["uplift_minus_blanket"]
+    pn = policy_numbers()
     _headline(
         fig,
-        "Whether to target, and with which model, is a question the experiment answers",
-        f"Left: no targeting rule beats e-mailing everyone; the cross-selected uplift procedure is "
-        f"{signed_money(gain['value_per_1000'])} per 1,000 vs blanket (95% CI "
-        f"{signed_money(gain['low'])} to {signed_money(gain['high'])}). Right: effects are "
-        f"concentrated where the\nbaseline rate is high, "
-        f"so the plain response model is the best uplift ranker. Out-of-sample estimates, 95% CI "
-        f"bands; Hillstrom profit assumes a {econ['margin']:.0%} margin and "
+        "E-mailing everyone beats every targeting rule on Hillstrom; "
+        "at 14M users the response model is the best uplift ranker",
+        f"Left: the cross-selected uplift procedure is {signed_money(gain['value_per_1000'])} per "
+        f"1,000 vs blanket (95% CI {signed_money(gain['low'])} to "
+        f"{signed_money(gain['high'])}), and below blanket in {pn['SPLITS_BELOW']} random splits. "
+        f"It ends below the blanket point because it\npicks the e-mail per customer. Right: effects "
+        f"concentrate where the baseline rate is high. Out-of-sample estimates; dashed lines and "
+        f"bands are 95% CIs; profit assumes a {econ['margin']:.0%} margin and "
         f"${econ['cost_per_email']:.2f} per e-mail.",
         y=1.08,
     )
@@ -213,7 +264,8 @@ def uplift_curves() -> Path:
     axes[0].set_ylabel("Incremental visits per 1,000 customers")
     _headline(
         fig,
-        "The Womens e-mail moves a findable subset of customers; for the Mens e-mail, ranking by response does better",
+        "Uplift learners find whom the women's e-mail moves; for the men's e-mail, "
+        "ranking by response beats the DR-learner",
         "Visit uplift curves, out-of-fold LightGBM scores. Grey: other meta-learners. Dashed: "
         "random targeting. Bootstrap 95% CI on the Qini coefficient.",
         y=1.06,
@@ -224,6 +276,7 @@ def uplift_curves() -> Path:
 def deciles() -> Path:
     df = read_table("deciles.csv").query("arm == 'Womens e-mail' and outcome == 'visit'")
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.4), sharey=True, gridspec_kw={"wspace": 0.06})
+    names = {RESPONSE: RESPONSE, "Uplift model": "Uplift model (T-learner)"}
     for ax, ranking, color in zip(axes, (RESPONSE, "Uplift model"), (AMBER, TEAL), strict=True):
         d = df[df["ranking"] == ranking]
         x = d["decile"].to_numpy()
@@ -251,8 +304,8 @@ def deciles() -> Path:
             capsize=2,
         )
         ax.set_xticks(x)
-        ax.set_xlabel(f"{ranking} decile (1 = top-ranked)")
-        ax.set_title(ranking, pad=6)
+        ax.set_xlabel(f"{names[ranking]} decile (1 = top-ranked)")
+        ax.set_title(names[ranking], pad=6)
         ax.legend(loc="upper right", fontsize=8.5)
     axes[0].set_ylabel("Visit rate (%)")
     top = df[df["decile"] <= 2].groupby("ranking")[["control_rate", "treated_rate", "uplift"]]
@@ -261,11 +314,11 @@ def deciles() -> Path:
     _headline(
         fig,
         f"In the response model's top 20%, {anyway[RESPONSE]:.0%} of e-mailed visitors would have "
-        f"come anyway ({anyway['Uplift model']:.0%} for the uplift model)",
-        f"Womens e-mail vs no e-mail. Top-20% incremental visit rate: uplift model "
+        f"come anyway ({anyway['Uplift model']:.0%} for the T-learner uplift model)",
+        f"Women's e-mail vs no e-mail. Top-20% incremental visit rate: uplift model "
         f"{100 * top.loc['Uplift model', 'uplift']:.1f} pp, response model "
         f"{100 * top.loc[RESPONSE, 'uplift']:.1f} pp. Bars: design-based rates per decile, "
-        f"95% CI.",
+        f"95% CI. 'Anyway' assumes the e-mail deters no one.",
         y=1.07,
     )
     return _save(fig, "deciles.png")
@@ -276,8 +329,8 @@ def selection() -> Path:
     df = read_table("selection_candidates.csv")
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8), gridspec_kw={"wspace": 0.28})
     labels = {
-        "visit": ("Target: visits", "incremental visits"),
-        "spend": ("Target: spend", "incremental $ spend"),
+        "visit": ("Visits", "incremental visits"),
+        "spend": ("Spend", "incremental $ spend"),
     }
     rhos = {}
     for ax, target in zip(axes, ("visit", "spend"), strict=True):
@@ -297,39 +350,37 @@ def selection() -> Path:
         lo = min(d["half0_per_1000"].min(), d["half1_per_1000"].min())
         hi = max(d["half0_per_1000"].max(), d["half1_per_1000"].max())
         ax.plot([lo, hi], [lo, hi], color=SLATE, lw=0.8, ls=":")
+        for axis_set, col in ((ax.set_xlim, "half0_per_1000"), (ax.set_ylim, "half1_per_1000")):
+            pad = 0.08 * (d[col].max() - d[col].min())
+            axis_set(d[col].min() - pad, d[col].max() + pad)
         title, unit = labels[target]
-        ax.set_title(f"{title}: rank correlation {rho:.2f}", pad=6)
+        ax.set_title(f"{title} — rank correlation {rho:.2f}", pad=6)
         ax.set_xlabel(f"Half A: mean {unit} per 1,000 over budgets")
         ax.set_ylabel(f"Half B: mean {unit} per 1,000")
-    for name, color in (
-        ("trained on visits", TEAL),
-        ("on conversions", AMBER),
-        ("on spend", SLATE),
-    ):
-        axes[1].scatter([], [], color=color, s=34, label=f"Candidate {name}")
-    axes[1].legend(loc="lower right", fontsize=8.5)
+    for name, color in (("visits", TEAL), ("conversions", AMBER), ("spend", SLATE)):
+        axes[0].scatter([], [], color=color, s=34, label=f"Trained on {name}")
+    axes[0].legend(loc="lower right", fontsize=8.5)
     _headline(
         fig,
         "Which uplift model looks best for revenue depends on which customers you look at",
-        f"30 candidate rankings (5 learners x 2 base models x 3 training outcomes), each scored "
-        f"on two random halves of the customers.\nRank agreement between halves: "
-        f"{rhos['spend']:.2f} for spend vs {rhos['visit']:.2f} for visits. Picking the best on "
-        f"the data used to report it would overstate its value.",
+        f"30 candidate rankings (5 learners × 2 base models × 3 training outcomes), each scored "
+        f"on two random halves of the customers. Rank agreement between halves: "
+        f"{rhos['spend']:.2f} for spend vs {rhos['visit']:.2f} for visits.\nHalf B happens to "
+        f"show a larger spend effect, so every spend point lies above equality "
+        f"(dotted line on the left); only their order matters. Picking the best on the data used to report it would "
+        f"overstate its value.",
         y=1.07,
     )
     return _save(fig, "selection.png")
 
 
 def cost_sensitivity() -> Path:
-    df = read_table("policy_by_cost.csv")
+    df = cost_table()
     margin = config.ECONOMICS.margin
-    df = df[df["cost_over_margin"] * margin <= 0.6 + 1e-9].copy()
-    df["cost"] = df["cost_over_margin"] * margin
-    df["profit"] = margin * df["spend_per_1000"] - 1000 * df["cost"] * df["share_emailed"]
-    df["half"] = margin * 1.96 * df["se_per_1000"]
+    df["half"] = df["profit"] - df["profit_low"]
     fig, ax = plt.subplots(figsize=(9.5, 4.8))
     styles = {
-        BLANKET: (SLATE, "--", "E-mail everyone (Mens)"),
+        BLANKET: (SLATE, "--", "E-mail everyone (men's)"),
         RESPONSE: (AMBER, "-", RESPONSE),
         UPLIFT: (TEAL, "-", "Uplift model"),
     }
@@ -345,6 +396,7 @@ def cost_sensitivity() -> Path:
             color,
             dy={BLANKET: 0, RESPONSE: 8, UPLIFT: -8}[policy],
         )
+    pn = policy_numbers()
     ax.axhline(0, color=INK, lw=0.8)
     ax.axvline(100 * config.ECONOMICS.cost_per_email, color=SLATE, lw=0.8, ls=":")
     ax.set_xlabel("Fully loaded cost per e-mail (cents)")
@@ -352,9 +404,11 @@ def cost_sensitivity() -> Path:
     ax.set_xlim(0, 60)
     _headline(
         fig,
-        "Targeting only earns its keep once an e-mail costs about as much as it returns",
+        f"E-mail everyone below about {pn['BLANKET_BREAK_EVEN']} per e-mail and no one above; "
+        f"{pn['DETECTABLE_COSTS']} does targeting detectably beat both",
         f"Each procedure picks how many to e-mail on one half and is scored on the other. "
-        f"Margin {margin:.0%}; dotted line: the default cost. 95% CI bands.",
+        f"Margin {margin:.0%}; dotted line: the default cost. 95% CI bands. Blanket sending "
+        f"breaks even where the cost equals margin × its spend lift.",
         y=1.08,
     )
     fig.subplots_adjust(right=0.8)
@@ -393,14 +447,17 @@ def criteo() -> Path:
         ax.set_xlim(0, 100)
         ax.set_ylim(bottom=0)
     top = dec[dec["decile"] == 1].iloc[0]
+    cn = criteo_numbers()
     _headline(
         fig,
         "At 14M users the effect tracks the baseline rate, and no meta-learner beats the response model",
         f"Criteo Uplift v2.1, fitted on {cs['n_train_sample'] / 1e6:.1f}M rows of one half, "
         f"evaluated on the other {cs['n_test'] / 1e6:.1f}M. The response "
         f"model's top decile visits {100 * top['control_rate']:.0f}% of the time untreated and "
-        f"gains {100 * top['uplift']:.1f} pp when treated.\nBands: pointwise 95% CI; Qini: 20 "
-        f"random-group 95% CI. Dotted: random targeting.",
+        f"gains {100 * top['uplift']:.1f} pp when treated.\nThe DR-learner's end jump: the "
+        f"{cn['CRITEO_DR_NEG_SHARE']} of users it scores below zero gain "
+        f"{cn['CRITEO_DR_NEG_UPLIFT']} in conversion when treated. Bands: pointwise 95% CI; "
+        f"Qini: 20 random-group 95% CI. Dotted: random targeting.",
         y=1.08,
     )
     return _save(fig, "criteo.png")

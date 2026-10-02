@@ -1,7 +1,7 @@
-"""Build ``site/index.html``: one self-contained page, narrative plus interactive charts.
+"""Build ``site/index.html`` and render ``README.md`` from their templates.
 
-Every number on the page is read from ``results/`` through
-:mod:`uplift_targeting.narrative`. Chart data is embedded as JSON and drawn
+Every number on the page and in the README is read from ``results/`` through
+:mod:`uplift_targeting.narrative`, so neither can drift from the outputs. Chart data is embedded as JSON and drawn
 with Plotly (jsDelivr). The profit chart is re-priced in the browser when the
 reader moves the margin or cost sliders; this is exact because margin and cost
 enter the policy value linearly, and the budget choices of the deployable
@@ -21,14 +21,15 @@ from uplift_targeting import config
 from uplift_targeting.narrative import load_numbers
 
 TEMPLATE = Path(__file__).with_name("report_template.html")
+README_TEMPLATE = Path(__file__).with_name("readme_template.md")
 PLOTLY = "https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"
 
 
-def _records(df: pd.DataFrame) -> list[dict]:
+def _records(df: pd.DataFrame) -> list[dict[str, object]]:
     return json.loads(df.to_json(orient="records", double_precision=6))
 
 
-def chart_data() -> dict:
+def chart_data() -> dict[str, object]:
     r = config.RESULTS
     policy = pd.read_csv(r / "policy_curves.csv").query("estimator == 'dr'")
     return {
@@ -47,20 +48,28 @@ def _effect(value: float, outcome: str) -> str:
     return f"${value:.3f}" if outcome == "spend" else f"{100 * value:.2f} pp"
 
 
+def _bound(value: float, outcome: str) -> str:
+    """A CI bound in the effect's units, without repeating the unit suffix."""
+    return f"${value:.3f}" if outcome == "spend" else f"{100 * value:.2f}"
+
+
 def ate_rows() -> str:
+    """Average-effect table body: one group per e-mail and outcome, one row per estimator."""
     ate = pd.read_csv(config.RESULTS / "ate.csv")
     rows = []
-    for _, r in ate.iterrows():
-        o = r["outcome"]
+    for (arm, outcome), d in ate.groupby(["arm", "outcome"], sort=False):
         rows.append(
-            "<tr>"
-            f"<td>{html.escape(r['arm'])}</td><td>{r['outcome']}</td>"
-            f"<td>{html.escape(r['estimator'])}</td>"
-            f"<td class=num>{_effect(r['estimate'], o)}</td>"
-            f"<td class=num>{_effect(r['low'], o)} to {_effect(r['high'], o)}</td>"
-            f"<td class=num>{r['ci_width_vs_dim']:.4f}</td>"
-            "</tr>"
+            f"<tr class=group><th colspan=4 scope=rowgroup>{html.escape(arm)} · {outcome}</th></tr>"
         )
+        for _, r in d.iterrows():
+            rows.append(
+                "<tr>"
+                f"<td>{html.escape(r['estimator'])}</td>"
+                f"<td class=num>{_effect(r['estimate'], outcome)}</td>"
+                f"<td class=num>[{_bound(r['low'], outcome)}, {_bound(r['high'], outcome)}]</td>"
+                f"<td class='num wide-only'>{r['ci_width_vs_dim']:.4f}</td>"
+                "</tr>"
+            )
     return "\n".join(rows)
 
 
@@ -80,26 +89,41 @@ def qini_rows() -> str:
     return "\n".join(rows)
 
 
-def run() -> Path:
-    numbers = load_numbers().text
-    page = TEMPLATE.read_text()
-    replacements = {
-        "{{PLOTLY}}": PLOTLY,
-        "{{DATA}}": json.dumps(chart_data(), separators=(",", ":")),
-        "{{ATE_ROWS}}": ate_rows(),
-        "{{QINI_ROWS}}": qini_rows(),
-        "{{MARGIN}}": f"{config.ECONOMICS.margin}",
-        "{{COST}}": f"{config.ECONOMICS.cost_per_email}",
-        "{{COST_FMT}}": f"${config.ECONOMICS.cost_per_email:.2f}",
-        "{{MARGIN_FMT}}": f"{config.ECONOMICS.margin:.0%}",
-        **{f"{{{{{k}}}}}": html.escape(v) for k, v in numbers.items()},
-    }
+def fill(template: str, replacements: dict[str, str]) -> str:
+    """Replace every ``{{KEY}}``; a placeholder left unfilled is an error."""
     for key, value in replacements.items():
-        page = page.replace(key, value)
-    leftover = sorted(set(re.findall(r"\{\{[A-Z0-9_]+\}\}", page)))
+        template = template.replace(f"{{{{{key}}}}}", value)
+    leftover = sorted(set(re.findall(r"\{\{[A-Z0-9_]+\}\}", template)))
     if leftover:
-        raise KeyError(f"Unfilled placeholders in the report template: {leftover}")
+        raise KeyError(f"Unfilled placeholders: {leftover}")
+    return template
+
+
+def render_readme(numbers: dict[str, str] | None = None) -> str:
+    return fill(README_TEMPLATE.read_text(), numbers or load_numbers())
+
+
+def render_page(numbers: dict[str, str] | None = None) -> str:
+    numbers = numbers or load_numbers()
+    return fill(
+        TEMPLATE.read_text(),
+        {
+            "PLOTLY": PLOTLY,
+            "DATA": json.dumps(chart_data(), separators=(",", ":")),
+            "ATE_ROWS": ate_rows(),
+            "QINI_ROWS": qini_rows(),
+            "MARGIN": f"{config.ECONOMICS.margin}",
+            "COST": f"{config.ECONOMICS.cost_per_email}",
+            **{k: html.escape(v) for k, v in numbers.items()},
+        },
+    )
+
+
+def run() -> list[Path]:
+    numbers = load_numbers()
     config.SITE.mkdir(parents=True, exist_ok=True)
-    out = config.SITE / "index.html"
-    out.write_text(page)
-    return out
+    page = config.SITE / "index.html"
+    page.write_text(render_page(numbers))
+    readme = config.ROOT / "README.md"
+    readme.write_text(render_readme(numbers))
+    return [page, readme]
