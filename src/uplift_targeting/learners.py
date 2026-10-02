@@ -24,11 +24,13 @@ passed in rather than estimated.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, Self
 
 import lightgbm as lgb
 import numpy as np
+from numpy.typing import ArrayLike
 from sklearn.base import BaseEstimator
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.model_selection import KFold
@@ -41,60 +43,81 @@ Task = Literal["classification", "regression"]
 BaseKind = Literal["lgbm", "linear"]
 
 
-def make_model(kind: BaseKind, task: Task, seed: int = config.SEED) -> BaseEstimator:
-    """Base learner factory: gradient boosting or a regularised linear model."""
+def make_model(
+    kind: BaseKind,
+    task: Task,
+    seed: int = config.SEED,
+    params: Mapping[str, object] | None = None,
+) -> BaseEstimator:
+    """Base learner factory: gradient boosting or a regularised linear model.
+
+    ``params`` overrides the default LightGBM settings (the Criteo section uses
+    larger trees and more threads); it is ignored by the linear models.
+    """
     if kind == "lgbm":
-        params = {**config.LIGHTGBM_PARAMS, "random_state": seed}
+        merged = {**config.LIGHTGBM_PARAMS, "random_state": seed, **(params or {})}
         if task == "classification":
-            return lgb.LGBMClassifier(**params)
-        return lgb.LGBMRegressor(**params)
+            return lgb.LGBMClassifier(**merged)
+        return lgb.LGBMRegressor(**merged)
     if task == "classification":
         return make_pipeline(StandardScaler(), LogisticRegression(C=0.1, max_iter=2000))
     return make_pipeline(StandardScaler(), Ridge(alpha=10.0))
 
 
-def predict_mean(model: BaseEstimator, X) -> np.ndarray:
+def predict_mean(model: BaseEstimator, X: ArrayLike) -> np.ndarray:
     """E[Y | X] from a fitted model: the class-1 probability for classifiers."""
     if hasattr(model, "predict_proba"):
         return model.predict_proba(X)[:, 1]
     return model.predict(X)
 
 
-def _as_array(X) -> np.ndarray:
+def _as_array(X: ArrayLike) -> np.ndarray:
     return np.asarray(X, dtype=float)
 
 
 @dataclass
 class MetaLearner:
-    """Common interface: ``fit(X, t, y)`` then ``predict(X)`` returns tau-hat."""
+    """Common interface: ``fit(X, t, y)`` then ``predict(X)`` returns tau-hat.
+
+    Every model a learner fits, including the first-stage models of the X- and
+    DR-learners, comes from :meth:`outcome_model` or :meth:`effect_model`, so
+    ``params`` reaches all of them.
+    """
 
     base: BaseKind = "lgbm"
     outcome_task: Task = "classification"
     propensity: float = 0.5
     seed: int = config.SEED
-    _fitted: dict = field(default_factory=dict, init=False, repr=False)
+    params: Mapping[str, object] | None = None
+    _fitted: dict[str, BaseEstimator | TLearner] = field(
+        default_factory=dict, init=False, repr=False
+    )
 
     def outcome_model(self) -> BaseEstimator:
-        return make_model(self.base, self.outcome_task, self.seed)
+        return make_model(self.base, self.outcome_task, self.seed, self.params)
 
     def effect_model(self) -> BaseEstimator:
         # Effects and pseudo-outcomes are continuous, whatever the outcome type.
-        return make_model(self.base, "regression", self.seed)
+        return make_model(self.base, "regression", self.seed, self.params)
 
-    def fit(self, X, t: np.ndarray, y: np.ndarray) -> MetaLearner:
+    def nuisance(self) -> TLearner:
+        """A first-stage T-learner with the same base model and settings."""
+        return TLearner(self.base, self.outcome_task, self.propensity, self.seed, self.params)
+
+    def fit(self, X: ArrayLike, t: np.ndarray, y: np.ndarray) -> Self:
         raise NotImplementedError
 
-    def predict(self, X) -> np.ndarray:
+    def predict(self, X: ArrayLike) -> np.ndarray:
         raise NotImplementedError
 
 
 class SLearner(MetaLearner):
-    def fit(self, X, t, y):
+    def fit(self, X: ArrayLike, t: np.ndarray, y: np.ndarray) -> Self:
         Xa = _as_array(X)
         self._fitted["m"] = self.outcome_model().fit(np.column_stack([Xa, t]), y)
         return self
 
-    def predict(self, X):
+    def predict(self, X: ArrayLike) -> np.ndarray:
         Xa = _as_array(X)
         model = self._fitted["m"]
         treated = predict_mean(model, np.column_stack([Xa, np.ones(len(Xa))]))
@@ -103,23 +126,24 @@ class SLearner(MetaLearner):
 
 
 class TLearner(MetaLearner):
-    def fit(self, X, t, y):
+    def fit(self, X: ArrayLike, t: np.ndarray, y: np.ndarray) -> Self:
         Xa = _as_array(X)
         self._fitted["m1"] = self.outcome_model().fit(Xa[t == 1], y[t == 1])
         self._fitted["m0"] = self.outcome_model().fit(Xa[t == 0], y[t == 0])
         return self
 
-    def mu(self, X, arm: int) -> np.ndarray:
+    def mu(self, X: ArrayLike, arm: int) -> np.ndarray:
         return predict_mean(self._fitted[f"m{arm}"], _as_array(X))
 
-    def predict(self, X):
+    def predict(self, X: ArrayLike) -> np.ndarray:
         return self.mu(X, 1) - self.mu(X, 0)
 
 
 class XLearner(MetaLearner):
-    def fit(self, X, t, y):
+    def fit(self, X: ArrayLike, t: np.ndarray, y: np.ndarray) -> Self:
         Xa = _as_array(X)
-        stage1 = TLearner(self.base, self.outcome_task, self.propensity, self.seed).fit(Xa, t, y)
+        stage1 = self.nuisance().fit(Xa, t, y)
+        self._fitted["stage1"] = stage1
         treated, control = t == 1, t == 0
         # Each arm's imputed effects use only the *other* arm's model, so they
         # are out-of-sample predictions by construction.
@@ -129,7 +153,7 @@ class XLearner(MetaLearner):
         self._fitted["tau0"] = self.effect_model().fit(Xa[control], d0)
         return self
 
-    def predict(self, X):
+    def predict(self, X: ArrayLike) -> np.ndarray:
         Xa = _as_array(X)
         g = self.propensity  # weight on the control-side estimate, as in Kunzel et al.
         return g * self._fitted["tau0"].predict(Xa) + (1 - g) * self._fitted["tau1"].predict(Xa)
@@ -146,30 +170,30 @@ def dr_pseudo_outcome(
 class DRLearner(MetaLearner):
     n_folds: int = config.N_INNER_FOLDS
 
-    def fit(self, X, t, y):
+    def fit(self, X: ArrayLike, t: np.ndarray, y: np.ndarray) -> Self:
         Xa = _as_array(X)
         mu0, mu1 = np.empty(len(y)), np.empty(len(y))
         folds = KFold(self.n_folds, shuffle=True, random_state=self.seed)
-        for fit_idx, out_idx in folds.split(Xa):
-            tl = TLearner(self.base, self.outcome_task, self.propensity, self.seed)
-            tl.fit(Xa[fit_idx], t[fit_idx], y[fit_idx])
+        for k, (fit_idx, out_idx) in enumerate(folds.split(Xa)):
+            tl = self.nuisance().fit(Xa[fit_idx], t[fit_idx], y[fit_idx])
             mu0[out_idx], mu1[out_idx] = tl.mu(Xa[out_idx], 0), tl.mu(Xa[out_idx], 1)
+            self._fitted[f"nuisance{k}"] = tl
         pseudo = dr_pseudo_outcome(y, t, mu0, mu1, self.propensity)
         self._fitted["tau"] = self.effect_model().fit(Xa, pseudo)
         return self
 
-    def predict(self, X):
+    def predict(self, X: ArrayLike) -> np.ndarray:
         return self._fitted["tau"].predict(_as_array(X))
 
 
 class TransformedOutcome(MetaLearner):
-    def fit(self, X, t, y):
+    def fit(self, X: ArrayLike, t: np.ndarray, y: np.ndarray) -> Self:
         e = self.propensity
         z = y * (t - e) / (e * (1 - e))
         self._fitted["tau"] = self.effect_model().fit(_as_array(X), z)
         return self
 
-    def predict(self, X):
+    def predict(self, X: ArrayLike) -> np.ndarray:
         return self._fitted["tau"].predict(_as_array(X))
 
 
@@ -183,6 +207,13 @@ LEARNERS: dict[str, type[MetaLearner]] = {
 
 
 def make_learner(
-    name: str, base: BaseKind, outcome_task: Task, propensity: float, seed: int = config.SEED
+    name: str,
+    base: BaseKind,
+    outcome_task: Task,
+    propensity: float,
+    seed: int = config.SEED,
+    params: Mapping[str, object] | None = None,
 ) -> MetaLearner:
-    return LEARNERS[name](base=base, outcome_task=outcome_task, propensity=propensity, seed=seed)
+    return LEARNERS[name](
+        base=base, outcome_task=outcome_task, propensity=propensity, seed=seed, params=params
+    )

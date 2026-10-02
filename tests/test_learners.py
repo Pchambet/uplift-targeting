@@ -38,3 +38,18 @@ def test_dr_pseudo_outcome_is_unbiased_with_wrong_outcome_model():
     wrong = np.zeros(len(exp.y))
     pseudo = dr_pseudo_outcome(exp.y, exp.t, wrong, wrong, exp.propensity)
     assert pseudo.mean() == pytest.approx(exp.tau.mean(), abs=0.05)
+
+
+@pytest.mark.parametrize("name", ["X-learner", "DR-learner"])
+def test_model_settings_reach_first_stage_models(name):
+    """Overrides must apply to the nuisance models too, not only to the final stage."""
+    exp = make_experiment(600, seed=4)
+    params = {"n_estimators": 7, "num_leaves": 5, "min_child_samples": 10}
+    learner = make_learner(name, "lgbm", "regression", exp.propensity, params=params)
+    learner.fit(exp.X, exp.t, exp.y)
+    stage1 = [m for k, m in learner._fitted.items() if k.startswith(("stage1", "nuisance"))]
+    fitted = [m._fitted[a] for m in stage1 for a in ("m0", "m1")]
+    fitted += [m for k, m in learner._fitted.items() if k.startswith("tau")]
+    assert len(fitted) >= 3
+    for model in fitted:
+        assert {k: model.get_params()[k] for k in params} == params
