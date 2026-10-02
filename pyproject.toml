@@ -9,11 +9,11 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "duckdb>=1.5.6",
+    "joblib>=1.6.0",
     "lightgbm>=4.7.0",
     "matplotlib>=3.11.2",
     "numpy>=2.5.3",
     "pandas>=3.0.6",
-    "plotly>=7.1.0",
     "scikit-learn>=1.9.1",
     "scipy>=1.18.1",
 ]
@@ -36,7 +36,10 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-extend-select = ["I", "B", "UP", "SIM"]
+extend-select = ["I", "B", "UP", "SIM", "ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

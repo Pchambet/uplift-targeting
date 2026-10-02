@@ -18,6 +18,8 @@ What is scored, per customer:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
@@ -25,7 +27,7 @@ from sklearn.model_selection import StratifiedKFold
 
 from uplift_targeting import config
 from uplift_targeting.data import Experiment
-from uplift_targeting.learners import LEARNERS, make_learner, make_model, predict_mean
+from uplift_targeting.learners import LEARNERS, Task, make_learner, make_model, predict_mean
 
 BASES = ("lgbm", "linear")
 
@@ -44,7 +46,7 @@ def outer_folds(exp: Experiment, n_folds: int = config.N_OUTER_FOLDS) -> np.ndar
     return folds
 
 
-def _task(outcome: str) -> str:
+def _task(outcome: str) -> Task:
     return "regression" if outcome == "spend" else "classification"
 
 
@@ -86,12 +88,16 @@ def out_of_fold_scores(exp: Experiment, folds: np.ndarray) -> pd.DataFrame:
     return pd.concat([meta, scores], axis=1)
 
 
+def scores_path() -> Path:
+    return config.DATA_INTERIM / "oof_scores.pkl"
+
+
 def run(exp: Experiment) -> pd.DataFrame:
     config.DATA_INTERIM.mkdir(parents=True, exist_ok=True)
     scores = out_of_fold_scores(exp, outer_folds(exp))
-    scores.to_pickle(config.DATA_INTERIM / "oof_scores.pkl")
+    scores.to_pickle(scores_path())
     return scores
 
 
 def load_scores() -> pd.DataFrame:
-    return pd.read_pickle(config.DATA_INTERIM / "oof_scores.pkl")
+    return pd.read_pickle(scores_path())

@@ -48,8 +48,12 @@ def download(url: str, dest: Path, expected_sha256: str | None = None) -> Path:
         request = urllib.request.Request(url, headers={"User-Agent": "uplift-targeting"})
         with urllib.request.urlopen(request, timeout=120) as response, tmp.open("wb") as out:
             shutil.copyfileobj(response, out, length=1 << 20)
+        # Verify before caching: a corrupted download must never become the cached file.
+        if expected_sha256 is not None and sha256(tmp) != expected_sha256:
+            tmp.unlink()
+            raise ValueError(f"Checksum mismatch for {url}; the download was discarded.")
         tmp.replace(dest)
-    if expected_sha256 is not None and sha256(dest) != expected_sha256:
+    elif expected_sha256 is not None and sha256(dest) != expected_sha256:
         raise ValueError(f"Checksum mismatch for {dest}; delete it and run `make data` again.")
     return dest
 
@@ -99,22 +103,20 @@ def build_experiment(raw: pd.DataFrame) -> Experiment:
     df = raw.copy()
     df["history_tier"] = df["history_segment"].str.slice(0, 1).astype(int)
     df["purchase_history"] = purchase_history(df["mens"], df["womens"])
-    X = pd.DataFrame(
-        {
-            "recency": df["recency"].astype(float),
-            "history": df["history"].astype(float),
-            "log_history": np.log1p(df["history"].astype(float)),
-            "mens": df["mens"].astype(float),
-            "womens": df["womens"].astype(float),
-            "newbie": df["newbie"].astype(float),
-            "zip_urban": (df["zip_code"] == "Urban").astype(float),
-            "zip_rural": (df["zip_code"] == "Rural").astype(float),
-            "channel_web": (df["channel"] == "Web").astype(float),
-            "channel_multichannel": (df["channel"] == "Multichannel").astype(float),
-            "history_tier": df["history_tier"].astype(float),
-        }
-    )
-    assert tuple(X.columns) == FEATURE_COLUMNS
+    columns = {
+        "recency": df["recency"].astype(float),
+        "history": df["history"].astype(float),
+        "log_history": np.log1p(df["history"].astype(float)),
+        "mens": df["mens"].astype(float),
+        "womens": df["womens"].astype(float),
+        "newbie": df["newbie"].astype(float),
+        "zip_urban": (df["zip_code"] == "Urban").astype(float),
+        "zip_rural": (df["zip_code"] == "Rural").astype(float),
+        "channel_web": (df["channel"] == "Web").astype(float),
+        "channel_multichannel": (df["channel"] == "Multichannel").astype(float),
+        "history_tier": df["history_tier"].astype(float),
+    }
+    X = pd.DataFrame({name: columns[name] for name in FEATURE_COLUMNS})
     arm = df["segment"].map(config.ARMS).to_numpy(dtype=np.int64)
     outcomes = df[list(config.OUTCOMES)].astype(float)
     return Experiment(X=X, arm=arm, outcomes=outcomes, raw=df)

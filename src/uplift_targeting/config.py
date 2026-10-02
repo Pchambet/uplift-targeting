@@ -7,10 +7,13 @@ number in the README.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+# The repository root in a source checkout; set UPLIFT_TARGETING_ROOT to run an
+# installed copy against another directory (data/, results/, docs/, site/).
+ROOT = Path(os.environ.get("UPLIFT_TARGETING_ROOT", Path(__file__).resolve().parents[2]))
 DATA_RAW = ROOT / "data" / "raw"
 DATA_INTERIM = ROOT / "data" / "interim"
 RESULTS = ROOT / "results"

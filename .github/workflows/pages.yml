@@ -1,4 +1,6 @@
 name: pages
+# Publishes the committed site/ as is: the page is built locally by `make report`,
+# because rebuilding it needs the full data and about half an hour of model fitting.
 on:
   push:
     branches: [main]
@@ -9,7 +11,7 @@ permissions:
   id-token: write
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -19,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: site
       - id: deployment

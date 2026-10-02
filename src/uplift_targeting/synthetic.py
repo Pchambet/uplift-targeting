@@ -1,8 +1,7 @@
 """Synthetic randomised experiments with a known individual treatment effect.
 
-Used by the tests (does a learner recover a known CATE ranking? are the policy
-value estimators unbiased?) and by the simulation check in the pipeline. The
-design mimics the hard part of real uplift data: the baseline outcome varies
+Used by the tests: does a learner recover a known CATE ranking, are the policy
+value estimators unbiased? The design mimics the hard part of real uplift data: the baseline outcome varies
 much more across customers than the treatment effect does, and the customers
 most likely to respond are not the ones most moved by the treatment.
 """
