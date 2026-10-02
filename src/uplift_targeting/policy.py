@@ -70,19 +70,20 @@ def value_difference(scores_a: np.ndarray, scores_b: np.ndarray) -> PolicyValue:
 
 
 def top_share_policy(
-    priority: np.ndarray, share: float, action_if_targeted: np.ndarray | int
+    priority: np.ndarray, share: float, action_if_targeted: np.ndarray | int, seed: int = 0
 ) -> np.ndarray:
     """Target the ``share`` of customers with the highest priority.
 
     Untargeted customers get action 0. ``action_if_targeted`` can be a constant
     (always send the same e-mail) or a per-customer array (send the e-mail with
-    the larger predicted effect). Ties at the cut-off are broken by row order,
-    so the result is deterministic.
+    the larger predicted effect). Ties at the cut-off are broken by a seeded
+    random order, never by file order, which may be sorted by treatment arm.
     """
     n = len(priority)
     k = round(share * n)
     chosen = np.zeros(n, dtype=bool)
     if k > 0:
-        chosen[np.argsort(-priority, kind="stable")[:k]] = True
+        tiebreak = np.random.default_rng(seed).permutation(n)
+        chosen[np.lexsort((tiebreak, -priority))[:k]] = True
     targeted = np.broadcast_to(np.asarray(action_if_targeted), (n,))
     return np.where(chosen, targeted, 0).astype(np.int64)

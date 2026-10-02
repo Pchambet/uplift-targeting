@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from scipy import stats
 
 
 @dataclass(frozen=True)
@@ -172,26 +173,56 @@ def targeted_uplift(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Incremental outcome per customer of the base when the top fraction is treated.
 
-    At fraction f, the estimate is ``f * (mean_T - mean_C)`` inside the top-f
-    group, with the Neyman standard error of that difference scaled by f. It
-    is the uplift curve divided by the population size, plus a pointwise SE.
+    At the end of each block of tied scores, the estimate is
+    ``share * (mean_T - mean_C)`` inside the targeted group, with the Neyman
+    standard error scaled by the share; values at the requested fractions are
+    interpolated between block ends. Cutting *inside* a tie block would let the
+    file order decide which tied rows are targeted, which biases the curve
+    whenever the data is sorted (Criteo's file is grouped by treatment).
     """
     order = np.argsort(-score, kind="stable")
-    y, t = y[order].astype(float), t[order]
-    n_t, n_c = np.cumsum(t), np.cumsum(1 - t)
-    s_t, s_c = np.cumsum(y * t), np.cumsum(y * (1 - t))
-    q_t, q_c = np.cumsum(y**2 * t), np.cumsum(y**2 * (1 - t))
-    gains, ses = [], []
-    for f in fractions:
-        k = round(float(f) * len(y)) - 1
-        if k < 0 or n_t[k] < 2 or n_c[k] < 2:
-            gains.append(0.0)
-            ses.append(0.0)
-            continue
-        m_t, m_c = s_t[k] / n_t[k], s_c[k] / n_c[k]
-        v_t = (q_t[k] - n_t[k] * m_t**2) / (n_t[k] - 1)
-        v_c = (q_c[k] - n_c[k] * m_c**2) / (n_c[k] - 1)
-        share = (k + 1) / len(y)
-        gains.append(share * (m_t - m_c))
-        ses.append(share * np.sqrt(v_t / n_t[k] + v_c / n_c[k]))
-    return np.array(gains), np.array(ses)
+    s, y, t = score[order], y[order].astype(float), t[order]
+    end = np.r_[s[1:] != s[:-1], True]
+    n_t, n_c = np.cumsum(t)[end], np.cumsum(1 - t)[end]
+    s_t, s_c = np.cumsum(y * t)[end], np.cumsum(y * (1 - t))[end]
+    q_t, q_c = np.cumsum(y**2 * t)[end], np.cumsum(y**2 * (1 - t))[end]
+    ok = (n_t >= 2) & (n_c >= 2)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        m_t, m_c = s_t / n_t, s_c / n_c
+        v_t = (q_t - n_t * m_t**2) / (n_t - 1)
+        v_c = (q_c - n_c * m_c**2) / (n_c - 1)
+        share = (n_t + n_c) / len(y)
+        gain = np.where(ok, share * (m_t - m_c), 0.0)
+        se = np.where(ok, share * np.sqrt(v_t / n_t + v_c / n_c), 0.0)
+    x = np.r_[0.0, share]
+    return np.interp(fractions, x, np.r_[0.0, gain]), np.interp(fractions, x, np.r_[0.0, se])
+
+
+def grouped_area_interval(
+    score: np.ndarray,
+    y: np.ndarray,
+    t: np.ndarray,
+    n_groups: int,
+    seed: int,
+    kind: str = "qini",
+    level: float = 0.95,
+) -> Interval:
+    """Area over random with a random-groups CI, for samples too large to bootstrap.
+
+    Customers are split into ``n_groups`` random disjoint groups and the
+    per-customer area is computed in each. For a root-n statistic the spread
+    of the group values, divided by sqrt(n_groups), estimates the standard error
+    of the full-sample value: one pass over the data instead of hundreds.
+    """
+    curve_fn = qini_curve if kind == "qini" else uplift_curve
+    estimate = area_over_random(curve_fn(score, y, t)) / len(y)
+    group = np.random.default_rng(seed).integers(0, n_groups, len(y))
+    values = np.array(
+        [
+            area_over_random(curve_fn(score[g], y[g], t[g])) / g.sum()
+            for g in (group == k for k in range(n_groups))
+        ]
+    )
+    se = values.std(ddof=1) / np.sqrt(n_groups)
+    half = stats.t.ppf(0.5 + level / 2, n_groups - 1) * se
+    return Interval(estimate, estimate - half, estimate + half)

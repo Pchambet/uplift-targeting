@@ -150,3 +150,31 @@ def benjamini_hochberg(p_values: np.ndarray) -> np.ndarray:
     out = np.empty(m)
     out[order] = np.minimum(adjusted, 1.0)
     return out
+
+
+def decile_rates(score: np.ndarray, y: np.ndarray, t: np.ndarray, seed: int) -> pd.DataFrame:
+    """Control rate, treated rate and their difference in each decile of a score.
+
+    Purely design-based: the score only decides who falls in which decile.
+    Ties are broken by a seeded random order, never by file order.
+    """
+    tiebreak = np.random.default_rng(seed).permutation(len(score))
+    rank = np.empty(len(score))
+    rank[np.lexsort((tiebreak, -score))] = np.arange(len(score))
+    decile = (10 * rank / len(score)).astype(int)  # 0 = top decile
+    rows = []
+    for d in range(10):
+        m = decile == d
+        eff = difference_in_means(y[m], t[m])
+        rows.append(
+            {
+                "decile": d + 1,
+                "n": int(m.sum()),
+                "control_rate": float(y[m][t[m] == 0].mean()),
+                "treated_rate": float(y[m][t[m] == 1].mean()),
+                "uplift": eff.estimate,
+                "uplift_low": eff.low,
+                "uplift_high": eff.high,
+            }
+        )
+    return pd.DataFrame(rows)

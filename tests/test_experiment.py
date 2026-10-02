@@ -5,6 +5,7 @@ import pytest
 from uplift_targeting.experiment import (
     benjamini_hochberg,
     cuped,
+    decile_rates,
     difference_in_means,
     holm,
     regression_adjusted,
@@ -80,3 +81,17 @@ def test_segment_heterogeneity_test():
     assert same["p_value"] > 0.001
     assert diff["p_value"] < 1e-6
     assert list(table["level"]) == ["a", "b"]
+
+
+def test_decile_rates_recover_a_known_gradient():
+    rng = np.random.default_rng(6)
+    n = 50_000
+    score = rng.uniform(size=n)
+    t = rng.integers(0, 2, n)
+    y = rng.binomial(1, 0.1 + t * 0.2 * score).astype(float)
+    table = decile_rates(score, y, t, seed=0)
+    assert list(table["decile"]) == list(range(1, 11))
+    assert table["n"].sum() == n
+    # Top decile (score ~0.95) has effect ~0.19; bottom (~0.05) has ~0.01.
+    assert table["uplift"].iloc[0] == pytest.approx(0.19, abs=0.03)
+    assert table["uplift"].iloc[-1] == pytest.approx(0.01, abs=0.03)

@@ -5,6 +5,7 @@ from uplift_targeting.metrics import (
     area_over_random,
     auuc,
     bootstrap_areas,
+    grouped_area_interval,
     qini_coefficient,
     qini_curve,
     targeted_uplift,
@@ -87,3 +88,27 @@ def test_targeted_uplift_matches_uplift_curve_and_neyman_se():
     top = np.argsort(-score)[:500]
     yt, tt = y[top], t[top]
     assert gain[0] == pytest.approx(0.5 * (yt[tt == 1].mean() - yt[tt == 0].mean()))
+
+
+def test_random_groups_interval_agrees_with_bootstrap():
+    rng = np.random.default_rng(5)
+    n = 60_000
+    tau = rng.uniform(0, 0.2, n)
+    t = rng.integers(0, 2, n)
+    y = rng.binomial(1, 0.1 + t * tau).astype(float)
+    score = tau + rng.normal(scale=0.05, size=n)
+    boot, _ = bootstrap_areas({"m": score}, y, t, n_boot=200, seed=1)
+    grouped = grouped_area_interval(score, y, t, n_groups=20, seed=1)
+    assert grouped.estimate == pytest.approx(boot["m"].estimate)
+    width_ratio = (grouped.high - grouped.low) / (boot["m"].high - boot["m"].low)
+    assert 0.6 < width_ratio < 1.6
+
+
+def test_targeted_uplift_ignores_file_order_inside_ties():
+    # One big tie block whose rows are sorted by arm: cutting inside it by
+    # position would compare treated-only rows; block-end evaluation does not.
+    y = np.array([1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0])
+    t = np.array([1, 1, 1, 1, 0, 0, 0, 0])
+    score = np.zeros(8)
+    gain, _ = targeted_uplift(score, y, t, np.array([0.25, 0.5, 1.0]))
+    np.testing.assert_allclose(gain, [0.0, 0.0, 0.0])

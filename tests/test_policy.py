@@ -72,3 +72,11 @@ def test_dr_with_good_model_has_smaller_variance_and_honest_ci():
         dr_scores(action, exp.t, exp.y, p, mu), dr_scores(nothing, exp.t, exp.y, p, mu)
     )
     assert gain.ci()[0] < np.mean(exp.tau) < gain.ci()[1]
+
+
+def test_ties_are_broken_at_random_not_by_file_order():
+    priority = np.zeros(1_000)
+    action = top_share_policy(priority, 0.5, 1)
+    assert action.sum() == 500
+    # File order would pick exactly the first half; a random tie-break does not.
+    assert 200 < action[:500].sum() < 300
