@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M2 14 L7 6 L10 9 L14 2%22 stroke=%22%230d9488%22 stroke-width=%222.2%22 fill=%22none%22/%3E%3C/svg%3E">
+<title>Uplift Targeting</title>
+<meta name="description" content="Whom to e-mail, and with which e-mail: uplift modelling and off-policy evaluation on the Hillstrom randomised experiment.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+<script src="{{PLOTLY}}"></script>
+<style>
+:root {
+  --bg: #fbfcfd; --surface: #f1f5f9; --ink: #0f172a; --ink-2: #334155; --muted: #64748b;
+  --rule: #e2e8f0; --teal: #0d9488; --teal-text: #0f766e; --amber: #d97706; --slate: #64748b;
+  --band-teal: rgba(13,148,136,.14); --band-amber: rgba(217,119,6,.14); --band-slate: rgba(100,116,139,.12);
+  --neutral-bar: #cbd5e1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f172a; --surface: #1e293b; --ink: #e2e8f0; --ink-2: #cbd5e1; --muted: #94a3b8;
+    --rule: #334155; --teal: #0f9f92; --teal-text: #5eead4; --amber: #cf7d14; --slate: #94a3b8;
+    --band-teal: rgba(15,159,146,.22); --band-amber: rgba(207,125,20,.22); --band-slate: rgba(148,163,184,.16);
+    --neutral-bar: #475569;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f172a; --surface: #1e293b; --ink: #e2e8f0; --ink-2: #cbd5e1; --muted: #94a3b8;
+  --rule: #334155; --teal: #0f9f92; --teal-text: #5eead4; --amber: #cf7d14; --slate: #94a3b8;
+  --band-teal: rgba(15,159,146,.22); --band-amber: rgba(207,125,20,.22); --band-slate: rgba(148,163,184,.16);
+  --neutral-bar: #475569;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 17px/1.62 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+table, .stats, .controls output { font-variant-numeric: tabular-nums; }
+main { max-width: 860px; margin: 0 auto; padding: 56px 16px 80px; }
+a { color: var(--teal-text); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+header .repo { font-weight: 600; color: var(--muted); font-size: 15px; margin: 0 0 28px; }
+header .repo a { color: inherit; text-decoration: none; }
+h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.12; letter-spacing: -0.022em; font-weight: 700; margin: 0 0 18px; max-width: 24ch; }
+.standfirst { font-size: 19px; color: var(--ink-2); max-width: 64ch; margin: 0 0 32px; }
+h2 { font-size: 26px; letter-spacing: -0.015em; line-height: 1.25; margin: 72px 0 6px; font-weight: 700; }
+h2 .part { color: var(--muted); font-weight: 500; margin-right: 10px; }
+h3 { font-size: 18px; margin: 36px 0 6px; font-weight: 600; }
+h2.hero-title { margin-top: 8px; font-size: 21px; max-width: 40ch; }
+section ul { padding-left: 20px; }
+section li { margin-bottom: 8px; }
+p, li { max-width: 70ch; }
+.lede { color: var(--ink-2); margin-top: 0; }
+figure { margin: 22px 0 8px; }
+figcaption { color: var(--muted); font-size: 14px; margin-top: 6px; max-width: 70ch; }
+.chart { width: 100%; height: 440px; }
+.chart.short { height: 380px; }
+.chart.tall { height: 560px; }
+.controls { display: flex; flex-wrap: wrap; gap: 14px 32px; align-items: center; margin: 4px 0 4px; font-size: 15px; }
+.controls label { display: flex; align-items: center; gap: 10px; color: var(--ink-2); }
+.controls output { font-weight: 600; color: var(--ink); min-width: 4.5ch; }
+input[type=range] { accent-color: var(--teal); width: 160px; }
+.readout-line { font-size: 15px; color: var(--ink-2); margin: 6px 0 0; min-height: 3em; }
+.readout-line strong { color: var(--ink); }
+.memo { border-left: 3px solid var(--teal); padding: 4px 0 4px 20px; margin: 36px 0; }
+.memo h2 { margin-top: 0; font-size: 20px; }
+.memo ol { padding-left: 20px; margin: 8px 0 0; }
+.memo li { margin-bottom: 8px; }
+.toggle { display: inline-flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; margin: 10px 0 0; }
+.toggle button { font: inherit; font-size: 14px; padding: 6px 14px; border: 0; background: transparent; color: var(--ink-2); cursor: pointer; }
+.toggle button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; }
+.table-wrap { overflow-x: auto; margin: 16px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; }
+td.num, th.num { text-align: right; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; margin: 24px 0; }
+.stats div { background: var(--bg); padding: 14px 16px; }
+.stats b { display: block; font-size: 24px; letter-spacing: -0.01em; }
+.stats span { color: var(--muted); font-size: 14px; line-height: 1.4; display: block; }
+details { margin: 12px 0; }
+summary { cursor: pointer; color: var(--ink-2); font-weight: 500; }
+footer { margin-top: 80px; padding-top: 20px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 14px; }
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+  main { padding-top: 32px; }
+  .chart { height: 360px; } .chart.tall { height: 520px; }
+  .standfirst { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <p class="repo"><a href="https://github.com/Pchambet/uplift-targeting">Pchambet / uplift-targeting</a></p>
+  <h1>E-mail the customers the e-mail moves, not the ones who would buy anyway</h1>
+  <p class="standfirst">A retailer e-mailed {{N}} customers at random: a Mens campaign, a Womens campaign, or nothing. The question a campaign team faces is whom to e-mail, and with which e-mail, so that the campaign earns money it would not have earned anyway. This page answers it with out-of-sample, uncertainty-aware estimates, and checks the method at scale on {{CRITEO_ROWS}} advertising users.</p>
+</header>
+
+<section aria-labelledby="hero-title">
+  <h2 id="hero-title" class="hero-title">On this experiment, no targeting rule beats e-mailing everyone</h2>
+  <div class="controls" role="group" aria-label="Unit economics">
+    <label>Gross margin <input id="margin" type="range" min="0.2" max="0.8" step="0.05" value="{{MARGIN}}"> <output for="margin" id="margin-out"></output></label>
+    <label>Cost per e-mail <input id="cost" type="range" min="0" max="0.4" step="0.01" value="{{COST}}"> <output for="cost" id="cost-out"></output></label>
+  </div>
+  <figure>
+    <div id="hero" class="chart" role="img" aria-label="Incremental profit per 1,000 customers against the share of customers e-mailed, for the uplift policy, the response-model policy and random targeting"></div>
+    <p class="readout-line" id="hero-readout" aria-live="polite"></p>
+    <figcaption>Incremental profit per 1,000 customers against the share e-mailed: doubly robust estimates with 95% bands. The uplift ranking is chosen on one half of the customers and scored on the other. Markers: the three procedures a team could ship, each choosing its own budget on held-out data. Move the sliders to re-price every curve.</figcaption>
+  </figure>
+</section>
+
+<section class="memo" aria-labelledby="memo-title">
+  <h2 id="memo-title">Decision memo</h2>
+  <ol>
+    <li>Send the Mens e-mail. It lifts conversion by {{MENS_CONV_PP}}, 95% CI {{MENS_CONV_CI}}, and spend by {{MENS_SPEND}} per customer, about twice the Womens e-mail ({{WOMENS_SPEND}}).</li>
+    <li>Send it to everyone while an e-mail costs less than about {{BREAK_EVEN_COST}} all-in. At {{COST_FMT}} it earns {{BLANKET_VALUE}} per 1,000 customers, 95% CI {{BLANKET_CI}}; the best uplift procedure earns {{UPLIFT_VALUE}}, CI {{UPLIFT_CI}}, a paired difference of {{UPLIFT_MINUS_BLANKET}}, CI {{UPLIFT_MINUS_BLANKET_CI}}.</li>
+    <li>Do not trust an in-sample model contest. Picking the best of 30 rankings and budgets on the evaluation data would have reported {{NAIVE_VALUE}} per 1,000, {{NAIVE_GAIN}} over blanket sending. The gain is selection noise.</li>
+    <li>Do not assume an uplift model beats a response model: test it on the experiment. Here the response model ranked as well as or better than every meta-learner, on Hillstrom and on {{CRITEO_ROWS}} Criteo users, where its top 20% holds {{CRITEO_TOP20_RESPONSE_SHARE}} of all incremental conversions against {{CRITEO_TOP20_DR_SHARE}} for the DR-learner. Uplift learners only help where the effect is decoupled from the baseline, as with the Womens e-mail, and even there the gain is within noise.</li>
+  </ol>
+</section>
+
+<section aria-labelledby="a-title">
+  <h2 id="a-title"><span class="part">A</span>Did the experiment work, and what did it do on average?</h2>
+  <p class="lede">The randomisation holds: arm sizes match the 1/3 design (chi-square p = {{SRM_P}}) and every covariate is balanced (largest absolute standardised difference {{MAX_SMD}}, against a usual alarm level of 0.1). Both e-mails work on average.</p>
+  <div class="stats">
+    <div><b>{{MENS_VISIT_PP}}</b><span>visit rate, Mens e-mail</span></div>
+    <div><b>{{MENS_CONV_PP}}</b><span>conversion, Mens e-mail ({{MENS_CONV_LIFT}} relative)</span></div>
+    <div><b>{{MENS_SPEND}}</b><span>spend per customer, Mens e-mail</span></div>
+    <div><b>{{WOMENS_SPEND}}</b><span>spend per customer, Womens e-mail</span></div>
+  </div>
+  <h3>Average effects, three estimators</h3>
+  <p>Variance reduction barely helps here. CUPED on past-year spend narrows the spend interval by {{CUPED_SPEND_SHRINK}}; the fully interacted regression adjustment of Lin (2013) narrows the visit interval by {{LIN_VISIT_SHRINK}}. A year of purchase history explains almost nothing of a two-week window, so the plain difference in means is the honest headline.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>E-mail</th><th>Outcome</th><th>Estimator</th><th class="num">Effect</th><th class="num">95% CI</th><th class="num">SE ratio</th></tr></thead>
+    <tbody>{{ATE_ROWS}}</tbody>
+  </table></div>
+  <h3>Pre-declared segments</h3>
+  <p>Five segment dimensions were declared before any model was fitted and tested once per e-mail and outcome: 30 heterogeneity tests, Holm-corrected. {{HOLM_SURVIVORS}} survive, both on visits and both on product line: the Womens e-mail barely moves customers who only ever bought menswear. Purchases and spend show no detectable heterogeneity at this sample size.</p>
+  <div class="toggle" role="group" aria-label="Segment outcome" data-target="segments">
+    <button type="button" data-value="visit" aria-pressed="true">Visit</button>
+    <button type="button" data-value="conversion" aria-pressed="false">Conversion</button>
+  </div>
+  <figure>
+    <div id="segments" class="chart tall" role="img" aria-label="Effect by segment for each e-mail, with 95% confidence intervals"></div>
+    <figcaption>Difference in rate (e-mail minus control) within each segment, 95% CI.</figcaption>
+  </figure>
+</section>
+
+<section aria-labelledby="b-title">
+  <h2 id="b-title"><span class="part">B</span>Can a model find the persuadable customers?</h2>
+  <p class="lede">Five meta-learners (S, T, X, cross-fitted DR, transformed outcome), each with a LightGBM and a regularised linear base model, trained with five-fold cross-fitting so that every customer is scored by models that never saw them, and benchmarked against the response model a marketing team would build.</p>
+  <div class="toggle" role="group" aria-label="E-mail and outcome" data-target="curves">
+    <button type="button" data-value="Womens e-mail|visit" aria-pressed="true">Womens · visits</button>
+    <button type="button" data-value="Mens e-mail|visit" aria-pressed="false">Mens · visits</button>
+    <button type="button" data-value="Mens e-mail|conversion" aria-pressed="false">Mens · conversions</button>
+    <button type="button" data-value="Mens e-mail|spend" aria-pressed="false">Mens · spend</button>
+  </div>
+  <figure>
+    <div id="curves" class="chart" role="img" aria-label="Uplift curves of each model for the selected e-mail and outcome"></div>
+    <figcaption>Uplift curves from out-of-fold LightGBM scores: height at x is the incremental outcome per 1,000 customers if the top x% by the model were e-mailed. Dashed: random targeting.</figcaption>
+  </figure>
+  <p>Where heterogeneity exists, the models find it: for the Womens e-mail, the DR-learner's Qini coefficient on visits is {{QINI_WOMENS_VISIT}} (×1,000, bootstrap 95% CI), clearly above random. But the plain response model finds most of it too ({{QINI_WOMENS_VISIT_RESPONSE}}); the paired difference, DR-learner minus response, is {{QINI_DIFF_WOMENS_VISIT}}. For the Mens e-mail the DR-learner is no better than random ({{QINI_MENS_VISIT}}) and the response model ranks better ({{QINI_DIFF_MENS_VISIT}}): that e-mail's effect grows with the customer's baseline propensity. On spend, {{SPEND_QINI_SIGNIFICANT}} rankings have a Qini interval that excludes zero.</p>
+  <details>
+    <summary>Qini coefficients of every model (×1,000, bootstrap 95% CI)</summary>
+    <div class="table-wrap"><table>
+      <thead><tr><th>E-mail</th><th>Outcome</th><th>Learner</th><th>Base model</th><th class="num">Qini</th><th class="num">95% CI</th></tr></thead>
+      <tbody>{{QINI_ROWS}}</tbody>
+    </table></div>
+  </details>
+  <h3>Where the response model wastes contacts</h3>
+  <p>For the Womens e-mail, the response model ranks customers by how likely they are to visit, so its top deciles are full of people who would have come anyway. In its top 20%, {{ANYWAY_RESPONSE}} of the e-mailed visitors would have visited without the e-mail, against {{ANYWAY_UPLIFT}} for the uplift model, which buys {{TOP20_LIFT_UPLIFT}} of extra visit rate there against {{TOP20_LIFT_RESPONSE}}.</p>
+  <figure>
+    <div id="deciles" class="chart short" role="img" aria-label="Visit rate without e-mail and extra visits from the Womens e-mail, by score decile, for the response model and the uplift model"></div>
+    <figcaption>Womens e-mail. Grey: visit rate of control customers in the decile. Colour: incremental visit rate caused by the e-mail, 95% CI. Design-based: the models only decide the ranking.</figcaption>
+  </figure>
+</section>
+
+<section aria-labelledby="c-title">
+  <h2 id="c-title"><span class="part">C</span>Which policy should ship?</h2>
+  <p class="lede">The decision is scored on spend, the outcome profit depends on. Every policy value is a doubly robust off-policy estimate on customers that neither trained the models nor chose the policy, with a paired standard error for every comparison.</p>
+  <div class="stats">
+    <div><b>{{BLANKET_VALUE}}</b><span>per 1,000 customers, e-mail everyone {{BLANKET_CI}}</span></div>
+    <div><b>{{UPLIFT_VALUE}}</b><span>uplift procedure, e-mails {{UPLIFT_SHARE}} {{UPLIFT_CI}}</span></div>
+    <div><b>{{RESPONSE_VALUE}}</b><span>response procedure, e-mails {{RESPONSE_SHARE}}</span></div>
+    <div><b>{{NAIVE_VALUE}}</b><span>what an in-sample model contest would report</span></div>
+  </div>
+  <p>Thirty candidate rankings compete: five learners and two base models, trained on visits, conversions or spend. A model trained on dense visits might rank customers better for revenue than one trained on sparse revenue, so the choice is left to data, but to data the final score never sees. The candidates' merit barely replicates from one random half of the customers to the other: rank correlation {{RHO_SPEND}} on spend, against {{RHO_VISIT}} on visits. With 578 buyers, the best-looking model is mostly the luckiest one.</p>
+  <figure>
+    <div id="selection" class="chart short" role="img" aria-label="Average incremental spend of each candidate ranking on one half of customers against the other half"></div>
+    <figcaption>Each dot is a candidate ranking, scored on two random halves (average incremental spend per 1,000 customers over budgets). Points far from a rising line mean the ranking does not replicate.</figcaption>
+  </figure>
+</section>
+
+<section aria-labelledby="d-title">
+  <h2 id="d-title"><span class="part">D</span>What changes when the experiment is two hundred times larger?</h2>
+  <p class="lede">The Criteo Uplift v2.1 benchmark logs {{CRITEO_ROWS}} users from randomised advertising incrementality tests, 85% treated. The same learners were fitted on a hash-based sample of {{CRITEO_TRAIN}} users from one half and evaluated on all {{CRITEO_TEST}} users of the other half. Treatment lifts visits by {{CRITEO_ATE_VISIT}} and conversions by {{CRITEO_ATE_CONV}} on average.</p>
+  <figure>
+    <div id="criteo" class="chart" role="img" aria-label="Uplift curves on the Criteo held-out half for visits and conversions"></div>
+    <figcaption>Incremental outcomes per 1,000 users when the top x% by each model is treated, pointwise 95% bands. Dashed: random targeting.</figcaption>
+  </figure>
+  <p>At this size every ranking beats random by a wide margin, and the effect is concentrated: the top 10% of users by the response model hold {{CRITEO_TOP10_VISIT_SHARE}} of all incremental visits. Their untreated visit rate is {{CRITEO_TOP_DECILE_BASE}} and treatment adds {{CRITEO_TOP_DECILE_LIFT}}: here the effect tracks the baseline rate, so ranking by "who will act" is also ranking by "who will be moved". The response model is the best uplift ranker (Qini ×1,000 on conversions: {{CRITEO_QINI_CONV_RESPONSE}}, against {{CRITEO_QINI_CONV_T}} for the T-learner and {{CRITEO_QINI_CONV_DR}} for the DR-learner). The meta-learners pay for estimating a small difference between two large, noisy predictions; with 15% controls and 0.3% conversions, the DR-learner's final stage even returns the same score for {{CRITEO_DR_TIE}} of users.</p>
+</section>
+
+<section aria-labelledby="m-title">
+  <h2 id="m-title">Method and limits</h2>
+  <ul>
+    <li><b>Out-of-sample by construction.</b> Five outer folds; every score comes from models fitted without that customer. The DR-learner cross-fits its own nuisance models inside the training folds. A test scrambles held-out outcomes and checks that held-out scores do not move.</li>
+    <li><b>Known propensities.</b> Assignment probabilities are fixed by design (1/3 per arm), so IPW and doubly robust policy values are unbiased without a propensity model. Tests check both on synthetic data, the DR one with a deliberately wrong outcome model.</li>
+    <li><b>Selection is part of the model.</b> Ranking and budget are chosen on one random half and applied to the other; the two halves are pooled.</li>
+    <li><b>Uncertainty.</b> Qini intervals are a Poisson bootstrap over customers with scores held fixed: they cover evaluation noise, not retraining noise. Policy intervals are normal approximations on per-customer doubly robust scores.</li>
+    <li><b>Assumed economics.</b> The data has no margins or costs. The defaults ({{MARGIN_FMT}} gross margin, {{COST_FMT}} per e-mail including fatigue and unsubscribe risk) are assumptions; the sliders show the conclusions under others.</li>
+    <li><b>Limits.</b> One two-week campaign from 2008 with 578 buyers; spend is heavy-tailed. Criteo features are anonymised, its labels are visits and conversions (not revenue), and its Qini intervals use 20 random groups of the held-out half instead of a bootstrap. A multiplicative model (response × relative lift) was not tried and would likely close the Criteo gap.</li>
+  </ul>
+</section>
+
+<footer>
+  Built by <a href="https://github.com/Pchambet">Pierre Chambet</a> — decision science for operations under uncertainty.
+  Code, tests and every number on this page: <a href="https://github.com/Pchambet/uplift-targeting">github.com/Pchambet/uplift-targeting</a>.
+</footer>
+</main>
+
+<script>
+const DATA = {{DATA}};
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const UPLIFT = "Uplift model (cross-selected)", RESPONSE = "Response model", RANDOM = "Random (Mens e-mail)", BLANKET = "Blanket Mens e-mail";
+const POLICIES = [
+  {key: UPLIFT, label: "Uplift model", color: "--teal", band: "--band-teal", dash: "solid"},
+  {key: RESPONSE, label: "Response model", color: "--amber", band: "--band-amber", dash: "solid"},
+  {key: RANDOM, label: "Random (Mens e-mail)", color: "--slate", band: "--band-slate", dash: "dash"},
+];
+const CONFIG = {displayModeBar: false, responsive: true};
+const money = (v) => (v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US", {maximumFractionDigits: 0});
+const state = {segments: "visit", curves: "Womens e-mail|visit"};
+
+function axis(title, extra) {
+  return Object.assign({gridcolor: css("--rule"), zerolinecolor: css("--muted"), linecolor: css("--rule"),
+    tickfont: {color: css("--muted")}, title: {text: title, font: {color: css("--muted")}}}, extra || {});
+}
+const narrow = () => window.innerWidth < 640;
+function layout(extra) {
+  return Object.assign({
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: {family: "Inter, system-ui, sans-serif", size: narrow() ? 11 : 13, color: css("--ink")},
+    margin: {l: narrow() ? 52 : 64, r: 12, t: narrow() ? 92 : 48, b: 52},
+    hoverlabel: {font: {family: "Inter, system-ui, sans-serif"}},
+    legend: {orientation: "h", x: 0, y: 1.02, yanchor: "bottom", font: {color: css("--muted")}},
+  }, extra || {});
+}
+function band(x, lo, hi, color) {
+  return {x: x.concat(x.slice().reverse()), y: hi.concat(lo.slice().reverse()), fill: "toself", fillcolor: css(color), line: {width: 0}, hoverinfo: "skip", showlegend: false};
+}
+
+function nearestRatio(ratio) {
+  const ratios = [...new Set(DATA.byCost.map((r) => r.cost_over_margin))];
+  return ratios.reduce((a, b) => (Math.abs(b - ratio) < Math.abs(a - ratio) ? b : a));
+}
+
+function drawHero() {
+  const m = +document.getElementById("margin").value, c = +document.getElementById("cost").value;
+  document.getElementById("margin-out").textContent = Math.round(m * 100) + "%";
+  document.getElementById("cost-out").textContent = "$" + c.toFixed(2);
+  const traces = [];
+  for (const p of POLICIES) {
+    const rows = DATA.spendCurves.filter((r) => r.policy === p.key);
+    const x = rows.map((r) => 100 * r.share);
+    const price = (v, r) => m * v - 1000 * c * r.share;
+    const y = rows.map((r) => price(r.value_per_1000, r)), lo = rows.map((r) => price(r.low, r)), hi = rows.map((r) => price(r.high, r));
+    traces.push(band(x, lo, hi, p.band));
+    traces.push({x, y, name: p.label, mode: "lines", line: {color: css(p.color), width: 2.4, dash: p.dash},
+      customdata: lo.map((l, i) => [l, hi[i]]),
+      hovertemplate: "%{x:.0f}% e-mailed: %{y:$,.0f} per 1,000<br>95% CI %{customdata[0]:$,.0f} to %{customdata[1]:$,.0f}<extra>" + p.label + "</extra>"});
+  }
+  const ratio = nearestRatio(c / m);
+  const ship = {};
+  for (const r of DATA.byCost.filter((r) => r.cost_over_margin === ratio)) {
+    const v = m * r.spend_per_1000 - 1000 * c * r.share_emailed;
+    ship[r.policy] = {share: r.share_emailed, v, h: 1.96 * m * r.se_per_1000};
+  }
+  const markers = [[UPLIFT, "--teal", "diamond", "Ship: uplift procedure"], [RESPONSE, "--amber", "square", "Ship: response procedure"], [BLANKET, "--slate", "circle", "Ship: e-mail everyone"]];
+  for (const [key, color, symbol, label] of markers) {
+    const s = ship[key];
+    traces.push({x: [100 * s.share], y: [s.v], name: label, mode: "markers",
+      marker: {symbol, size: 11, color: css(color), line: {color: css("--bg"), width: 2}},
+      error_y: {type: "data", array: [s.h], color: css(color), thickness: 1.4, width: 4},
+      hovertemplate: label + "<br>%{x:.0f}% e-mailed: %{y:$,.0f} per 1,000<extra></extra>"});
+  }
+  Plotly.react("hero", traces, layout({
+    xaxis: axis(narrow() ? "Share e-mailed" : "Customers e-mailed (% of base, ranked by each policy)", {range: [0, 102], ticksuffix: "%"}),
+    yaxis: axis(narrow() ? "Profit per 1,000 ($)" : "Incremental profit per 1,000 customers ($)", {tickprefix: "$", zerolinecolor: css("--ink")}),
+    hovermode: "closest", margin: {l: narrow() ? 52 : 64, r: 12, t: narrow() ? 132 : 76, b: 52},
+  }), CONFIG);
+  const up = ship[UPLIFT], bl = ship[BLANKET], rs = ship[RESPONSE];
+  document.getElementById("hero-readout").innerHTML =
+    `At a ${Math.round(m * 100)}% margin and $${c.toFixed(2)} per e-mail, e-mailing everyone earns <strong>${money(bl.v)}</strong> per 1,000 customers ` +
+    `(95% CI ${money(bl.v - bl.h)} to ${money(bl.v + bl.h)}). The uplift procedure e-mails <strong>${(100 * up.share).toFixed(0)}%</strong> and earns <strong>${money(up.v)}</strong>; ` +
+    `the response procedure e-mails ${(100 * rs.share).toFixed(0)}% and earns ${money(rs.v)}.`;
+}
+
+function drawCurves() {
+  const [arm, outcome] = state.curves.split("|");
+  const rows = DATA.upliftCurves.filter((r) => r.arm === arm && r.outcome === outcome);
+  const models = ["Transformed outcome", "S-learner", "T-learner", "X-learner", RESPONSE, "DR-learner"];
+  const traces = models.map((model) => {
+    const d = rows.filter((r) => r.model === model);
+    const color = model === "DR-learner" ? css("--teal") : model === RESPONSE ? css("--amber") : css("--neutral-bar");
+    const strong = model === "DR-learner" || model === RESPONSE;
+    return {x: d.map((r) => 100 * r.fraction), y: d.map((r) => r.gain_per_1000), name: model, mode: "lines",
+      line: {color, width: strong ? 2.6 : 1.3}, hovertemplate: "%{x:.0f}%: %{y:.2f}<extra>" + model + "</extra>"};
+  });
+  const end = rows.find((r) => r.model === "DR-learner" && r.fraction === 1).gain_per_1000;
+  traces.unshift({x: [0, 100], y: [0, end], name: "Random", mode: "lines", line: {color: css("--slate"), dash: "dash", width: 1.4}, hoverinfo: "skip"});
+  const unit = (outcome === "spend" ? "Extra $ spend" : `Extra ${outcome}s`) + " per 1,000";
+  Plotly.react("curves", traces, layout({
+    xaxis: axis(narrow() ? "Share e-mailed" : "Customers e-mailed (% of base, ranked by model)", {ticksuffix: "%", range: [0, 100]}),
+    yaxis: axis(unit, {zerolinecolor: css("--ink")}),
+  }), CONFIG);
+}
+
+function drawDeciles() {
+  const traces = [];
+  [[RESPONSE, "x", "y", "--amber"], ["Uplift model", "x2", "y2", "--teal"]].forEach(([name, xa, ya, color], i) => {
+    const d = DATA.deciles.filter((r) => r.ranking === name && r.arm === "Womens e-mail" && r.outcome === "visit");
+    traces.push({type: "bar", x: d.map((r) => r.decile), y: d.map((r) => 100 * r.control_rate), name: "Visit without e-mail", marker: {color: css("--neutral-bar")}, xaxis: xa, yaxis: ya, showlegend: i === 0, hovertemplate: "Decile %{x}: %{y:.1f}%<extra>Without e-mail</extra>"});
+    traces.push({type: "bar", x: d.map((r) => r.decile), y: d.map((r) => 100 * r.uplift), name: `Extra visits, ${name.toLowerCase()} ranking`, marker: {color: css(color)}, xaxis: xa, yaxis: ya,
+      error_y: {type: "data", symmetric: false, array: d.map((r) => 100 * (r.uplift_high - r.uplift)), arrayminus: d.map((r) => 100 * (r.uplift - r.uplift_low)), color: css("--muted"), thickness: 1, width: 2},
+      hovertemplate: "Decile %{x}: %{y:.1f} pp<extra>Extra from e-mail</extra>"});
+  });
+  Plotly.react("deciles", traces, layout({
+    barmode: "group", bargap: 0.25, grid: {rows: 1, columns: 2, pattern: "independent"},
+    xaxis: axis("Response-model decile (1 = top)", {dtick: 1}), xaxis2: axis("Uplift-model decile (1 = top)", {dtick: 1}),
+    yaxis: axis("Visit rate (%)"), yaxis2: axis("", {matches: "y"}),
+  }), CONFIG);
+}
+
+function drawSegments() {
+  const names = {purchase_history: "Bought", newbie: "Customer", channel: "Channel", zip_code: "Area", history_tier: "Spend"};
+  const rows = DATA.segments.filter((r) => r.outcome === state.segments);
+  const traces = [["Mens e-mail", "--teal"], ["Womens e-mail", "--amber"]].map(([arm, color]) => {
+    const d = rows.filter((r) => r.arm === arm);
+    return {x: d.map((r) => 100 * r.estimate), y: d.map((r) => `${names[r.dimension]}: ${r.level}`), name: arm, mode: "markers", type: "scatter",
+      marker: {color: css(color), size: 8},
+      error_x: {type: "data", symmetric: false, array: d.map((r) => 100 * (r.high - r.estimate)), arrayminus: d.map((r) => 100 * (r.estimate - r.low)), color: css(color), thickness: 1.4, width: 0},
+      hovertemplate: "%{y}<br>%{x:.2f} pp<extra>" + arm + "</extra>"};
+  });
+  Plotly.react("segments", traces, layout({
+    margin: {l: narrow() ? 130 : 170, r: 12, t: 40, b: 52}, scattermode: "group",
+    xaxis: axis(`Effect on ${state.segments} rate (percentage points)`, {zerolinecolor: css("--ink")}),
+    yaxis: axis("", {autorange: "reversed", tickfont: {color: css("--ink-2"), size: 12}}),
+  }), CONFIG);
+}
+
+function drawSelection() {
+  const colors = {visit: "--teal", conversion: "--amber", spend: "--slate"};
+  const rows = DATA.candidates.filter((r) => r.target === "spend");
+  const traces = Object.entries(colors).map(([trained, color]) => {
+    const d = rows.filter((r) => r.trained_on === trained);
+    return {x: d.map((r) => r.half0_per_1000), y: d.map((r) => r.half1_per_1000), name: `Trained on ${trained}`, mode: "markers",
+      marker: {color: css(color), size: 9, line: {color: css("--bg"), width: 1}},
+      text: d.map((r) => `${r.learner}, ${r.base}`), hovertemplate: "%{text}<br>Half A: $%{x:.0f} · Half B: $%{y:.0f}<extra></extra>"};
+  });
+  Plotly.react("selection", traces, layout({
+    xaxis: axis("Half A: incremental spend per 1,000 ($)"), yaxis: axis("Half B: incremental spend per 1,000 ($)"),
+  }), CONFIG);
+}
+
+function drawCriteo() {
+  const models = [["T-learner", "--neutral-bar", null], [RESPONSE, "--amber", "--band-amber"], ["DR-learner", "--teal", "--band-teal"]];
+  const traces = [];
+  [["visit", "x", "y"], ["conversion", "x2", "y2"]].forEach(([outcome, xa, ya], i) => {
+    const rows = DATA.criteo.filter((r) => r.outcome === outcome);
+    for (const [model, color, bandColor] of models) {
+      const d = rows.filter((r) => r.model === model);
+      const x = d.map((r) => 100 * r.fraction);
+      if (bandColor) traces.push(Object.assign(band(x, d.map((r) => r.low), d.map((r) => r.high), bandColor), {xaxis: xa, yaxis: ya}));
+      traces.push({x, y: d.map((r) => r.gain_per_1000), name: model, mode: "lines", line: {color: css(color), width: 2.2}, xaxis: xa, yaxis: ya, showlegend: i === 0, legendgroup: model, hovertemplate: "%{x:.0f}%: %{y:.3f}<extra>" + model + "</extra>"});
+    }
+    const end = rows.find((r) => r.model === "DR-learner" && r.fraction === 1).gain_per_1000;
+    traces.push({x: [0, 100], y: [0, end], name: "Random", mode: "lines", line: {color: css("--slate"), dash: "dash", width: 1.3}, xaxis: xa, yaxis: ya, showlegend: i === 0, legendgroup: "random", hoverinfo: "skip"});
+  });
+  Plotly.react("criteo", traces, layout({
+    grid: {rows: 1, columns: 2, pattern: "independent"},
+    xaxis: axis("Users targeted: visits", {ticksuffix: "%"}), xaxis2: axis("Users targeted: conversions", {ticksuffix: "%"}),
+    yaxis: axis("Incremental outcomes per 1,000 users"), yaxis2: axis(""),
+  }), CONFIG);
+}
+
+const DRAW = {segments: drawSegments, curves: drawCurves};
+function drawAll() { drawHero(); drawCurves(); drawDeciles(); drawSegments(); drawSelection(); drawCriteo(); }
+document.getElementById("margin").addEventListener("input", drawHero);
+document.getElementById("cost").addEventListener("input", drawHero);
+document.querySelectorAll(".toggle").forEach((group) => group.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+  group.querySelectorAll("button").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+  state[group.dataset.target] = b.dataset.value;
+  DRAW[group.dataset.target]();
+})));
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
+window.matchMedia("(max-width: 639px)").addEventListener("change", drawAll);
+drawAll();
+</script>
+</body>
+</html>
