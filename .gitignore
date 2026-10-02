@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.ruff_cache/
+.pytest_cache/
+data/raw/
+data/interim/
+.DS_Store
+.ipynb_checkpoints/
+.env
+*.part

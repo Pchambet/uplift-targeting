@@ -1,0 +1,43 @@
+[project]
+name = "uplift-targeting"
+version = "0.1.0"
+description = "Uplift modelling and off-policy evaluation of e-mail targeting on a real randomised experiment."
+readme = "README.md"
+authors = [
+    { name = "Pierre_Chambet", email = "pierrechambet@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb>=1.5.6",
+    "lightgbm>=4.7.0",
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
+    "pandas>=3.0.6",
+    "plotly>=7.1.0",
+    "scikit-learn>=1.9.1",
+    "scipy>=1.18.1",
+]
+
+[project.scripts]
+uplift-targeting = "uplift_targeting.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+extend-select = ["I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
