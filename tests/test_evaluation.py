@@ -74,3 +74,23 @@ def test_budget_choice_responds_to_cost():
     assert np.mean(cheap > 0) >= 0.5
     assert np.mean(pricey > 0) == pytest.approx(0.5, abs=0.06)
     assert np.mean(never > 0) == 0.0
+
+
+def test_value_curve_matches_policy_by_policy_evaluation():
+    from uplift_targeting.evaluation import SHARES, value_curve
+
+    scores = synthetic_scores(n=3_000, seed=4)
+    data = PolicyData.from_scores(scores, "spend")
+    cs = cross_select(scores, data)
+    mask = cs.half == 1
+    ranking = cs.candidates["Noise | lgbm | spend"]
+    sub = data.subset(mask)
+    slow = [sub.incremental(ranking.policy(s, mask)[mask]).estimate for s in SHARES]
+    np.testing.assert_allclose(value_curve(data, ranking, mask), slow, atol=1e-12)
+
+
+def test_unknown_estimator_is_an_error():
+    scores = synthetic_scores(n=300)
+    data = PolicyData.from_scores(scores, "spend")
+    with pytest.raises(ValueError, match="Unknown estimator"):
+        data.scores(np.ones(300, dtype=np.int64), "aipw")

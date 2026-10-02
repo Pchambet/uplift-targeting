@@ -19,7 +19,9 @@ procedure "select on past data, then deploy", which is what a team would run.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal, Self
 
 import numpy as np
 import pandas as pd
@@ -32,6 +34,7 @@ from uplift_targeting.policy import (
     PolicyValue,
     dr_scores,
     ipw_scores,
+    priority_order,
     top_share_policy,
     value,
     value_difference,
@@ -46,6 +49,8 @@ CURVE_GRID = np.linspace(0, 1, 101)
 SHARES = np.array(config.BUDGET_GRID)
 PER = 1000  # values are reported per 1,000 customers in the base
 POLICY_TARGETS = ("visit", "spend")  # dense traffic signal, sparse money signal
+N_SPLITS = 50  # random half-splits used to check that the cross-selected result is not one draw
+Estimator = Literal["dr", "ipw"]
 
 
 def tau_column(outcome: str, arm: int, learner: str, base: str) -> str:
@@ -177,7 +182,7 @@ class PolicyData:
     mu: np.ndarray  # (n, 3) cross-fitted E[y | X, action]
 
     @classmethod
-    def from_scores(cls, scores: pd.DataFrame, outcome: str) -> PolicyData:
+    def from_scores(cls, scores: pd.DataFrame, outcome: str) -> Self:
         logged = scores["arm"].to_numpy()
         mu = scores[[response_column(outcome, a) for a in (0, 1, 2)]].to_numpy()
         propensity = np.full(len(logged), config.DESIGN_PROPENSITY)
@@ -186,16 +191,18 @@ class PolicyData:
     def subset(self, mask: np.ndarray) -> PolicyData:
         return PolicyData(self.logged[mask], self.y[mask], self.propensity[mask], self.mu[mask])
 
-    def scores(self, action: np.ndarray, estimator: str = "dr") -> np.ndarray:
+    def scores(self, action: np.ndarray, estimator: Estimator = "dr") -> np.ndarray:
         """Per-customer scores of ``action`` minus those of e-mailing nobody."""
-        nobody = np.zeros_like(action)
-        if estimator == "ipw":
-            own = ipw_scores(action, self.logged, self.y, self.propensity)
-            return own - ipw_scores(nobody, self.logged, self.y, self.propensity)
-        own = dr_scores(action, self.logged, self.y, self.propensity, self.mu)
-        return own - dr_scores(nobody, self.logged, self.y, self.propensity, self.mu)
+        estimators: dict[str, Callable[[np.ndarray], np.ndarray]] = {
+            "dr": lambda a: dr_scores(a, self.logged, self.y, self.propensity, self.mu),
+            "ipw": lambda a: ipw_scores(a, self.logged, self.y, self.propensity),
+        }
+        if estimator not in estimators:
+            raise ValueError(f"Unknown estimator {estimator!r}; expected 'dr' or 'ipw'")
+        score = estimators[estimator]
+        return score(action) - score(np.zeros_like(action))
 
-    def incremental(self, action: np.ndarray, estimator: str = "dr") -> PolicyValue:
+    def incremental(self, action: np.ndarray, estimator: Estimator = "dr") -> PolicyValue:
         """Incremental outcome per customer of ``action`` versus e-mailing nobody."""
         return value(self.scores(action, estimator))
 
@@ -259,9 +266,17 @@ def split_halves(arm: np.ndarray, seed: int = config.SEED) -> np.ndarray:
 
 
 def value_curve(data: PolicyData, ranking: Ranking, mask: np.ndarray) -> np.ndarray:
-    """Incremental outcome per customer at every budget share, using ``mask`` rows only."""
+    """Incremental outcome per customer at every budget share, using ``mask`` rows only.
+
+    Same policies as :meth:`Ranking.policy`, computed in one pass: a customer
+    left out contributes zero to the per-customer score (versus e-mailing
+    nobody), so the value of e-mailing the top k is a cumulative sum along the
+    ranking.
+    """
     sub = data.subset(mask)
-    return np.array([sub.incremental(ranking.policy(s, mask)[mask]).estimate for s in SHARES])
+    delta = sub.scores(ranking.email[mask])
+    gains = np.r_[0.0, np.cumsum(delta[priority_order(ranking.priority[mask])])]
+    return gains[[round(s * len(delta)) for s in SHARES]] / len(delta)
 
 
 def select_ranking(data: PolicyData, candidates: dict[str, Ranking], mask: np.ndarray) -> str:
@@ -294,8 +309,8 @@ class CrossSelection:
         return action
 
 
-def cross_select(scores: pd.DataFrame, data: PolicyData) -> CrossSelection:
-    half = split_halves(scores["arm"].to_numpy())
+def cross_select(scores: pd.DataFrame, data: PolicyData, seed: int = config.SEED) -> CrossSelection:
+    half = split_halves(scores["arm"].to_numpy(), seed)
     candidates = uplift_candidates(scores)
     chosen = {h: select_ranking(data, candidates, half == 1 - h) for h in (0, 1)}
     return CrossSelection(half, chosen, candidates)
@@ -358,7 +373,7 @@ class BudgetChoice:
     blanket: dict[int, float]  # blanket Mens value, measured on half 1 - h
 
     @classmethod
-    def build(cls, data: PolicyData, half: np.ndarray, rankings: dict[int, Ranking]):
+    def build(cls, data: PolicyData, half: np.ndarray, rankings: dict[int, Ranking]) -> Self:
         curves, blanket = {}, {}
         for h in (0, 1):
             select = half == 1 - h
@@ -384,6 +399,7 @@ class BudgetChoice:
 def budget_choices(
     scores: pd.DataFrame, data: PolicyData, cs: CrossSelection
 ) -> dict[str, BudgetChoice]:
+    """Budget choosers for the uplift and the response procedures on the same halves."""
     response = response_ranking(scores, "spend")
     return {
         UPLIFT: BudgetChoice.build(data, cs.half, {h: cs.ranking(h) for h in (0, 1)}),
@@ -422,8 +438,12 @@ def economics_grid(data: PolicyData, choices: dict[str, BudgetChoice]) -> pd.Dat
     """
     rows = []
     for ratio in np.round(np.arange(0.0, 2.0001, 0.025), 3):  # holds 0.15 / 0.40 exactly
-        for name, action in deployable(choices, ratio).items():
+        actions = deployable(choices, ratio)
+        blanket = data.scores(actions[BLANKET])
+        for name, action in actions.items():
             v = data.incremental(action)
+            # Paired against blanket sending on the same customers (zero for blanket itself).
+            d = value_difference(data.scores(action), blanket)
             rows.append(
                 {
                     "cost_over_margin": ratio,
@@ -431,6 +451,8 @@ def economics_grid(data: PolicyData, choices: dict[str, BudgetChoice]) -> pd.Dat
                     "share_emailed": float(np.mean(action > 0)),
                     "spend_per_1000": PER * v.estimate,
                     "se_per_1000": PER * v.se,
+                    "minus_blanket_per_1000": PER * d.estimate,
+                    "minus_blanket_se_per_1000": PER * d.se,
                 }
             )
     return pd.DataFrame(rows)
@@ -448,12 +470,45 @@ def naive_in_sample(
     best = {"choice": BLANKET, "share": 1.0}
     everyone = np.ones(len(scores), dtype=np.int64)
     best_value = margin * data.incremental(everyone).estimate - cost
-    for name, ranking in {**cs.candidates, RESPONSE: response_ranking(scores, "spend")}.items():
+    rankings = {**cs.candidates, RESPONSE: response_ranking(scores, "spend")}
+    for name, ranking in rankings.items():
         for s, v in zip(SHARES, value_curve(data, ranking, everything), strict=True):
             profit = margin * v - cost * s
             if profit > best_value:
                 best, best_value = {"choice": name, "share": float(s)}, profit
-    return best | {"value_per_1000": PER * best_value}
+    return best | {"value_per_1000": PER * best_value, "n_rankings": len(rankings)}
+
+
+def split_robustness(
+    scores: pd.DataFrame, data: PolicyData, margin: float, cost: float, n_splits: int = N_SPLITS
+) -> pd.DataFrame:
+    """The whole cross-selection procedure re-run on ``n_splits`` random half-splits.
+
+    One split is one draw: which models get chosen, and how many customers they
+    e-mail, moves with it. Repeating the procedure shows how much of the
+    headline result is the split and how much is the data.
+    """
+    everyone = np.ones(len(scores), dtype=np.int64)
+    rows = []
+    for k in range(n_splits):
+        cs = cross_select(scores, data, seed=config.SEED + k)
+        acts = deployable(budget_choices(scores, data, cs), cost / margin)
+        row: dict[str, object] = {
+            "split": k,
+            "selected_half0": cs.chosen[0],
+            "selected_half1": cs.chosen[1],
+        }
+        for name, key in ((UPLIFT, "uplift"), (RESPONSE, "response")):
+            a = acts[name]
+            row[f"{key}_share"] = float(np.mean(a > 0))
+            row[f"{key}_per_1000"] = priced(data.incremental(a), row[f"{key}_share"], margin, cost)[
+                "value_per_1000"
+            ]
+            row[f"{key}_minus_blanket_per_1000"] = compare(data, a, everyone, margin, cost)[
+                "value_per_1000"
+            ]
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def candidate_table(data: PolicyData, cs: CrossSelection, target: str) -> pd.DataFrame:
@@ -541,6 +596,23 @@ def run(scores: pd.DataFrame, n_boot: int = config.N_BOOTSTRAP) -> dict:
             data, acts[UPLIFT], acts[RESPONSE], margin, cost
         )
         summary[target]["naive_in_sample"] = naive_in_sample(scores, data, cs, margin, cost)
+        splits = split_robustness(scores, data, margin, cost)
+        splits.to_csv(out / "split_robustness.csv", index=False)
+        diff = splits["uplift_minus_blanket_per_1000"]
+        summary[target]["split_robustness"] = {
+            "n_splits": len(splits),
+            "uplift_minus_blanket_mean": float(diff.mean()),
+            "uplift_minus_blanket_min": float(diff.min()),
+            "uplift_minus_blanket_max": float(diff.max()),
+            "n_below_blanket": int((diff < 0).sum()),
+            "uplift_mean_per_1000": float(splits["uplift_per_1000"].mean()),
+            "uplift_share_median": float(splits["uplift_share"].median()),
+            "uplift_share_min": float(splits["uplift_share"].min()),
+            "uplift_share_max": float(splits["uplift_share"].max()),
+            "n_distinct_selections": int(
+                pd.concat([splits["selected_half0"], splits["selected_half1"]]).nunique()
+            ),
+        }
     pd.concat(curves_out).to_csv(out / "policy_curves.csv", index=False)
     pd.concat(candidates_out).to_csv(out / "selection_candidates.csv", index=False)
     (out / "policy_summary.json").write_text(json.dumps(summary, indent=2))

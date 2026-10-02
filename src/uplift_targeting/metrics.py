@@ -10,10 +10,14 @@ tie block, so the result does not depend on the arbitrary order of tied rows.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 from scipy import stats
+
+AreaKind = Literal["qini", "uplift"]
 
 
 @dataclass(frozen=True)
@@ -116,6 +120,17 @@ def auuc(
     return area_over_random(curve) / n
 
 
+CURVES: dict[str, Callable[..., Curve]] = {"qini": qini_curve, "uplift": uplift_curve}
+
+
+def curve_function(kind: AreaKind) -> Callable[..., Curve]:
+    """The curve behind an area; an unknown kind is an error, never a silent default."""
+    try:
+        return CURVES[kind]
+    except KeyError:
+        raise ValueError(f"Unknown curve kind {kind!r}; expected one of {sorted(CURVES)}") from None
+
+
 @dataclass(frozen=True)
 class Interval:
     estimate: float
@@ -132,7 +147,7 @@ def bootstrap_areas(
     t: np.ndarray,
     n_boot: int,
     seed: int,
-    kind: str = "qini",
+    kind: AreaKind = "qini",
     level: float = 0.95,
 ) -> tuple[dict[str, Interval], np.ndarray]:
     """Percentile-bootstrap CIs for the area of several rankings at once.
@@ -142,7 +157,7 @@ def bootstrap_areas(
     comparisons between models. The scores are held fixed: the interval covers
     evaluation-sample noise, not the variance of re-training the models.
     """
-    curve_fn = qini_curve if kind == "qini" else uplift_curve
+    curve_fn = curve_function(kind)
     names = list(scores)
     orders = {m: np.argsort(-scores[m], kind="stable") for m in names}
     point = {}
@@ -204,7 +219,7 @@ def grouped_area_interval(
     t: np.ndarray,
     n_groups: int,
     seed: int,
-    kind: str = "qini",
+    kind: AreaKind = "qini",
     level: float = 0.95,
 ) -> Interval:
     """Area over random with a random-groups CI, for samples too large to bootstrap.
@@ -214,7 +229,7 @@ def grouped_area_interval(
     of the group values, divided by sqrt(n_groups), estimates the standard error
     of the full-sample value: one pass over the data instead of hundreds.
     """
-    curve_fn = qini_curve if kind == "qini" else uplift_curve
+    curve_fn = curve_function(kind)
     estimate = area_over_random(curve_fn(score, y, t)) / len(y)
     group = np.random.default_rng(seed).integers(0, n_groups, len(y))
     values = np.array(

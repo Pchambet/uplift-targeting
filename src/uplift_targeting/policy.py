@@ -69,6 +69,12 @@ def value_difference(scores_a: np.ndarray, scores_b: np.ndarray) -> PolicyValue:
     return _mean_se(scores_a - scores_b)
 
 
+def priority_order(priority: np.ndarray, seed: int = 0) -> np.ndarray:
+    """Indices from highest to lowest priority, ties broken by a seeded random order."""
+    tiebreak = np.random.default_rng(seed).permutation(len(priority))
+    return np.lexsort((tiebreak, -priority))
+
+
 def top_share_policy(
     priority: np.ndarray, share: float, action_if_targeted: np.ndarray | int, seed: int = 0
 ) -> np.ndarray:
@@ -83,7 +89,6 @@ def top_share_policy(
     k = round(share * n)
     chosen = np.zeros(n, dtype=bool)
     if k > 0:
-        tiebreak = np.random.default_rng(seed).permutation(n)
-        chosen[np.lexsort((tiebreak, -priority))[:k]] = True
+        chosen[priority_order(priority, seed)[:k]] = True
     targeted = np.broadcast_to(np.asarray(action_if_targeted), (n,))
     return np.where(chosen, targeted, 0).astype(np.int64)

@@ -112,3 +112,11 @@ def test_targeted_uplift_ignores_file_order_inside_ties():
     score = np.zeros(8)
     gain, _ = targeted_uplift(score, y, t, np.array([0.25, 0.5, 1.0]))
     np.testing.assert_allclose(gain, [0.0, 0.0, 0.0])
+
+
+def test_unknown_curve_kind_is_an_error():
+    from uplift_targeting.metrics import bootstrap_areas
+
+    y, t = np.array([1.0, 0.0, 1.0, 0.0]), np.array([1, 0, 1, 0])
+    with pytest.raises(ValueError, match="Unknown curve kind"):
+        bootstrap_areas({"m": np.arange(4.0)}, y, t, n_boot=2, seed=0, kind="auuc")
