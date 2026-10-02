@@ -79,6 +79,7 @@ LIGHTGBM_PARAMS: dict[str, object] = {
     "subsample_freq": 1,
     "colsample_bytree": 0.8,
     "reg_lambda": 5.0,
-    "n_jobs": 3,
+    "n_jobs": 1,  # small data: one thread per model, parallelism across folds instead
     "verbose": -1,
 }
+N_WORKERS = 3  # outer folds scored in parallel; keeps the CPU footprint at three cores
