@@ -10,10 +10,10 @@ What is scored, per customer:
 
 * ``tau__{outcome}__{arm}__{learner}__{base}``: predicted effect of e-mail
   ``arm`` (1 = Mens, 2 = Womens) versus no e-mail.
-* ``response``: the classic response model, P(conversion | X, e-mailed),
-  trained on customers who received the Mens e-mail.
-* ``mu__{outcome}__{arm}``: E[outcome | X, arm] for arms 0, 1, 2, used as the
-  outcome model of the doubly robust policy-value estimator.
+* ``mu__{outcome}__{arm}``: E[outcome | X, arm] for arms 0, 1, 2. It is the
+  outcome model of the doubly robust policy-value estimator and, for arms 1
+  and 2, it is also the classic *response model*: it predicts who buys after
+  receiving the e-mail, not who buys *because of* it.
 """
 
 from __future__ import annotations
@@ -67,11 +67,6 @@ def score_fold(exp: Experiment, train: np.ndarray, test: np.ndarray) -> dict[str
             fit = train & (exp.arm == arm)
             model = make_model("lgbm", _task(outcome)).fit(X[fit], y[fit])
             out[f"mu__{outcome}__{arm}"] = predict_mean(model, X[test])
-    fit = train & (exp.arm == 1)
-    response = make_model("lgbm", "classification").fit(
-        X[fit], exp.outcomes["conversion"].to_numpy()[fit]
-    )
-    out["response"] = predict_mean(response, X[test])
     return out
 
 

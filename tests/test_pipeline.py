@@ -56,13 +56,18 @@ def test_pipeline_writes_complete_out_of_sample_results(
     summary = evaluation.run(scores, n_boot=10)
     for name in (
         "qini.csv",
-        "policy_profit.csv",
-        "policy_spend.csv",
+        "uplift_curves.csv",
         "deciles.csv",
-        "cost_sensitivity.csv",
+        "policy_curves.csv",
+        "policy_by_cost.csv",
+        "selection_candidates.csv",
         "policy_summary.json",
     ):
         assert (tmp_path / name).exists(), name
-    assert 0.0 <= summary["decision_rule"]["share_emailed"] <= 1.0
-    profit = (tmp_path / "policy_profit.csv").read_text()
-    assert "Uplift model (best e-mail)" in profit and "Random (Mens e-mail)" in profit
+    deployed = summary["spend"]["deployable"]
+    assert {"Uplift model (cross-selected)", "Response model", "Blanket Mens e-mail"} == set(
+        deployed
+    )
+    for policy in deployed.values():
+        assert 0.0 <= policy["share_emailed"] <= 1.0
+        assert policy["low"] <= policy["value_per_1000"] <= policy["high"]

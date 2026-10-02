@@ -165,3 +165,33 @@ def bootstrap_areas(
         for j, m in enumerate(names)
     }
     return out, reps
+
+
+def targeted_uplift(
+    score: np.ndarray, y: np.ndarray, t: np.ndarray, fractions: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Incremental outcome per customer of the base when the top fraction is treated.
+
+    At fraction f, the estimate is ``f * (mean_T - mean_C)`` inside the top-f
+    group, with the Neyman standard error of that difference scaled by f. It
+    is the uplift curve divided by the population size, plus a pointwise SE.
+    """
+    order = np.argsort(-score, kind="stable")
+    y, t = y[order].astype(float), t[order]
+    n_t, n_c = np.cumsum(t), np.cumsum(1 - t)
+    s_t, s_c = np.cumsum(y * t), np.cumsum(y * (1 - t))
+    q_t, q_c = np.cumsum(y**2 * t), np.cumsum(y**2 * (1 - t))
+    gains, ses = [], []
+    for f in fractions:
+        k = round(float(f) * len(y)) - 1
+        if k < 0 or n_t[k] < 2 or n_c[k] < 2:
+            gains.append(0.0)
+            ses.append(0.0)
+            continue
+        m_t, m_c = s_t[k] / n_t[k], s_c[k] / n_c[k]
+        v_t = (q_t[k] - n_t[k] * m_t**2) / (n_t[k] - 1)
+        v_c = (q_c[k] - n_c[k] * m_c**2) / (n_c[k] - 1)
+        share = (k + 1) / len(y)
+        gains.append(share * (m_t - m_c))
+        ses.append(share * np.sqrt(v_t / n_t[k] + v_c / n_c[k]))
+    return np.array(gains), np.array(ses)

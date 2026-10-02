@@ -86,15 +86,3 @@ def top_share_policy(
         chosen[np.argsort(-priority, kind="stable")[:k]] = True
     targeted = np.broadcast_to(np.asarray(action_if_targeted), (n,))
     return np.where(chosen, targeted, 0).astype(np.int64)
-
-
-def threshold_policy(effects: np.ndarray, margin: float, cost: float) -> np.ndarray:
-    """E-mail a customer iff the best e-mail's predicted profit beats its cost.
-
-    ``effects`` has shape (n, n_emails): predicted incremental spend for each
-    e-mail. This rule needs no budget and no tuning on the evaluation data, so
-    its estimated value carries no selection optimism.
-    """
-    best = np.argmax(effects, axis=1)
-    gain = margin * effects[np.arange(len(effects)), best] - cost
-    return np.where(gain > 0, best + 1, 0).astype(np.int64)

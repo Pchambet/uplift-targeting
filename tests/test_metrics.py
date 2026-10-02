@@ -7,6 +7,7 @@ from uplift_targeting.metrics import (
     bootstrap_areas,
     qini_coefficient,
     qini_curve,
+    targeted_uplift,
     uplift_curve,
 )
 
@@ -70,3 +71,19 @@ def test_oracle_ranking_beats_random_and_bootstrap_brackets_estimate():
     assert reps.shape == (50, 2)
     for iv in intervals.values():
         assert iv.low <= iv.estimate <= iv.high
+
+
+def test_targeted_uplift_matches_uplift_curve_and_neyman_se():
+    rng = np.random.default_rng(2)
+    n = 1_000
+    score, t = rng.normal(size=n), rng.integers(0, 2, n)
+    y = rng.binomial(1, 0.2 + 0.1 * t).astype(float)
+    gain, se = targeted_uplift(score, y, t, np.array([0.5, 1.0]))
+    curve = uplift_curve(score, y, t)
+    assert gain[1] == pytest.approx(curve.gain[-1] / n)
+    y1, y0 = y[t == 1], y[t == 0]
+    expected_se = np.sqrt(y1.var(ddof=1) / len(y1) + y0.var(ddof=1) / len(y0))
+    assert se[1] == pytest.approx(expected_se)
+    top = np.argsort(-score)[:500]
+    yt, tt = y[top], t[top]
+    assert gain[0] == pytest.approx(0.5 * (yt[tt == 1].mean() - yt[tt == 0].mean()))

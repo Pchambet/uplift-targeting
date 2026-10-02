@@ -4,7 +4,6 @@ import pytest
 from uplift_targeting.policy import (
     dr_scores,
     ipw_scores,
-    threshold_policy,
     top_share_policy,
     value,
     value_difference,
@@ -30,12 +29,6 @@ def test_top_share_policy_targets_the_highest_priorities():
         top_share_policy(priority, 0.5, np.array([2, 1, 2, 2])), [0, 1, 0, 2]
     )
     np.testing.assert_array_equal(top_share_policy(priority, 0.0, 1), [0, 0, 0, 0])
-
-
-def test_threshold_policy_picks_best_email_only_when_profitable():
-    effects = np.array([[1.0, 0.2], [0.1, 0.5], [0.05, 0.02]])
-    # margin 0.4, cost 0.15: gains 0.25, 0.05, -0.13
-    np.testing.assert_array_equal(threshold_policy(effects, 0.4, 0.15), [1, 2, 0])
 
 
 @pytest.mark.parametrize("estimator", ["ipw", "dr_misspecified"])
