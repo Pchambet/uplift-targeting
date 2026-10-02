@@ -1,0 +1,191 @@
+{
+  "economics": {
+    "margin": 0.4,
+    "cost_per_email": 0.15
+  },
+  "visit": {
+    "selected_rankings": {
+      "half0": "DR-learner | lgbm | visit",
+      "half1": "S-learner | linear | conversion"
+    },
+    "at_budget": [
+      {
+        "share": 0.2,
+        "uplift": {
+          "value_per_1000": 16.33161059840545,
+          "low": 12.94101123627462,
+          "high": 19.72220996053628
+        },
+        "response": {
+          "value_per_1000": 19.756914955376637,
+          "low": 16.260130161644582,
+          "high": 23.25369974910869
+        },
+        "random": {
+          "value_per_1000": 15.215825496115556,
+          "low": 13.906158939364287,
+          "high": 16.525492052866827
+        },
+        "uplift_minus_response": {
+          "value_per_1000": -3.4253043569711847,
+          "low": -6.4303606842807834,
+          "high": -0.4202480296615856
+        },
+        "uplift_minus_random": {
+          "value_per_1000": 1.1157851022898937,
+          "low": -1.8792700131024258,
+          "high": 4.110840217682213
+        }
+      },
+      {
+        "share": 0.4,
+        "uplift": {
+          "value_per_1000": 30.237306060928045,
+          "low": 25.68678198325237,
+          "high": 34.78783013860372
+        },
+        "response": {
+          "value_per_1000": 33.035342369759114,
+          "low": 28.31702941305568,
+          "high": 37.75365532646255
+        },
+        "random": {
+          "value_per_1000": 30.431650992231113,
+          "low": 27.812317878728575,
+          "high": 33.050984105733654
+        },
+        "uplift_minus_response": {
+          "value_per_1000": -2.798036308831071,
+          "low": -6.381658476941757,
+          "high": 0.7855858592796148
+        },
+        "uplift_minus_random": {
+          "value_per_1000": -0.19434493130306985,
+          "low": -3.734457674785498,
+          "high": 3.3457678121793584
+        }
+      }
+    ],
+    "best_email_everyone_minus_blanket_mens": {
+      "value_per_1000": -0.5696713722188549,
+      "low": -3.299467697883443,
+      "high": 2.160124953445733
+    },
+    "share_womens_when_everyone_emailed": 0.147265625,
+    "blanket_mens": {
+      "value_per_1000": 76.07912748057778,
+      "low": 69.53079469682143,
+      "high": 82.62746026433413
+    }
+  },
+  "spend": {
+    "selected_rankings": {
+      "half0": "Transformed outcome | linear | visit",
+      "half1": "T-learner | lgbm | conversion"
+    },
+    "at_budget": [
+      {
+        "share": 0.2,
+        "uplift": {
+          "value_per_1000": 35.03420515292284,
+          "low": -18.151044335904942,
+          "high": 88.21945464175062
+        },
+        "response": {
+          "value_per_1000": 50.16741577445172,
+          "low": -10.18792784498551,
+          "high": 110.52275939388895
+        },
+        "random": {
+          "value_per_1000": 31.08131630082369,
+          "low": 8.282774072652867,
+          "high": 53.87985852899452
+        },
+        "uplift_minus_response": {
+          "value_per_1000": -15.133210621528878,
+          "low": -68.26685031853552,
+          "high": 38.000429075477754
+        },
+        "uplift_minus_random": {
+          "value_per_1000": 3.9528888520991448,
+          "low": -44.65657109052324,
+          "high": 52.56234879472152
+        }
+      },
+      {
+        "share": 0.4,
+        "uplift": {
+          "value_per_1000": 53.60511987820353,
+          "low": -19.942389029307826,
+          "high": 127.15262878571488
+        },
+        "response": {
+          "value_per_1000": 47.69578723571519,
+          "low": -35.08310870855084,
+          "high": 130.4746831799812
+        },
+        "random": {
+          "value_per_1000": 62.16263260164738,
+          "low": 16.565548145305733,
+          "high": 107.75971705798904
+        },
+        "uplift_minus_response": {
+          "value_per_1000": 5.909332642488351,
+          "low": -67.6442395379806,
+          "high": 79.4629048229573
+        },
+        "uplift_minus_random": {
+          "value_per_1000": -8.557512723443836,
+          "low": -74.06218232228741,
+          "high": 56.94715687539974
+        }
+      }
+    ],
+    "best_email_everyone_minus_blanket_mens": {
+      "value_per_1000": -27.4251980383751,
+      "low": -104.12686738857745,
+      "high": 49.27647131182725
+    },
+    "share_womens_when_everyone_emailed": 0.30134375,
+    "blanket_mens": {
+      "value_per_1000": 155.40658150411844,
+      "low": 41.41387036326432,
+      "high": 269.39929264497255
+    },
+    "deployable": {
+      "Uplift model (cross-selected)": {
+        "share_emailed": 0.85,
+        "value_per_1000": 113.94130518964613,
+        "low": 8.674761795768148,
+        "high": 219.2078485835241
+      },
+      "Response model": {
+        "share_emailed": 0.925,
+        "value_per_1000": 142.13303340904628,
+        "low": 30.62925374149394,
+        "high": 253.63681307659863
+      },
+      "Blanket Mens e-mail": {
+        "share_emailed": 1.0,
+        "value_per_1000": 155.40658150411844,
+        "low": 41.41387036326432,
+        "high": 269.39929264497255
+      }
+    },
+    "uplift_minus_blanket": {
+      "value_per_1000": -41.46527631447225,
+      "low": -120.73955330793429,
+      "high": 37.80900067898979
+    },
+    "uplift_minus_response": {
+      "value_per_1000": -28.19172821940013,
+      "low": -104.84415000918844,
+      "high": 48.46069357038817
+    },
+    "naive_in_sample": {
+      "choice": "T-learner | linear | conversion",
+      "share": 1.0,
+      "value_per_1000": 182.35362663167024
+    }
+  }
+}
